@@ -49,7 +49,9 @@ issue trackers, reports, or Git.
 
 ## Current verification status
 
-The supplied URL is present and uses a compatible PostgreSQL scheme, but this
-repository must not authenticate with it until the previously exposed database
-password is rotated in Supabase. Therefore, remote connectivity, migration,
-schema, and persistence verification are blocked pending credential rotation.
+On 2026-11-01, remote verification stopped before authentication because the
+ignored `DATABASE_URL` still contained the literal placeholder host
+`YOUR_POOLER_HOST`, which DNS cannot resolve. No remote migration, schema
+inspection, or data mutation occurred. Replace that placeholder with the exact
+Supabase Session Pooler hostname from the Supabase Connect panel while keeping
+the rotated password URL out of Git. Then run the verification command above.

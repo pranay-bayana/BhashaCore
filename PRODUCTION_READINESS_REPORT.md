@@ -3,7 +3,7 @@
 ## PASS
 
 - Flask application import, Gunicorn entry point, health endpoint, security headers, and Alembic initial migration. Production startup guards for the secret, PostgreSQL URL, Redis, trusted hosts, and secure cookies passed.
-- The WSGI application loads an ignored `.env` without overriding hosting-environment variables. PostgreSQL connections use psycopg, TLS, bounded connection checkout, and pre-ping. The supplied `DATABASE_URL` has a compatible PostgreSQL scheme; no connection was attempted.
+- The WSGI application loads an ignored `.env` without overriding hosting-environment variables. PostgreSQL connections use psycopg, TLS, bounded connection checkout, and pre-ping.
 - Both repository migrations applied to a disposable database. Schema verification confirmed users, conversations, messages, password-reset tokens, indexes, foreign keys, and the Alembic version table.
 - SQLAlchemy persistence model with users, conversations, messages, unique email, foreign keys, ownership index, and cascading relationships.
 - Password hashing, sign-up, sign-in, sign-out, protected authenticated chat/settings routes, CSRF enforcement, and ownership-tested conversation loading.
@@ -15,7 +15,7 @@
 
 ## BLOCKED
 
-- Supabase connectivity, migration state, schema, and persistence verification: a compatible `DATABASE_URL` is present in the ignored `.env`, but the brief identifies its password as previously exposed. Authentication was deliberately not attempted. Rotate that password in Supabase, update the ignored `.env`, then run the safe checks in `SUPABASE_SETUP.md`.
+- Supabase connectivity, migration state, schema, and persistence verification: the post-rotation attempt reached DNS resolution but the configured host is the literal placeholder `YOUR_POOLER_HOST`. It cannot resolve, so authentication, `SELECT 1`, TLS verification, migration inspection, and all remote data tests are blocked. No remote mutation occurred. Replace only that placeholder with the Session Pooler hostname, then run the safe checks in `SUPABASE_SETUP.md`.
 - Redis shared-rate-limit verification: `REDIS_URL` is absent. Next action: provision Redis, set `REDIS_URL`, and run Gunicorn multi-worker rate-limit tests.
 - NVIDIA live generation: model discovery completed in 169 ms and confirmed the configured model, but a capped streaming generation request timed out after 15 seconds. No generation success is claimed.
 - Real transactional email delivery: `EMAIL_API_KEY`, `EMAIL_FROM`, and `APP_BASE_URL` are absent. Next action: configure Resend variables and send a controlled reset email.
