@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="{{ get_interface_lang() }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>{% block title %}{{ t('brand') }}{% endblock %} — {{ t('brand') }}</title>
+    <style>
+        :root {
+            --primary: #1a365d;
+            --primary-light: #2d5a8e;
+            --accent: #e65100;
+            --bg: #f0f4f8;
+            --card: #ffffff;
+            --text: #1a365d;
+            --muted: #5a7a9d;
+            --border: #d7e0e9;
+            --ok: #1e7e34;
+            --warn: #b26a00;
+            --bad: #b23a3a;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+            background: var(--bg); color: var(--text); line-height: 1.55;
+        }
+        a { color: var(--primary-light); }
+        header {
+            background: var(--primary); color: #fff; position: sticky; top: 0; z-index: 50;
+            box-shadow: 0 2px 8px rgba(0,0,0,.15);
+        }
+        .header-inner {
+            max-width: 1100px; margin: 0 auto; padding: 12px 16px;
+            display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+        }
+        .brand { font-weight: 700; font-size: 1.15rem; color: #fff; text-decoration: none; }
+        .brand small { display: block; font-weight: 400; font-size: .7rem; opacity: .8; }
+        nav.main-nav { margin-left: auto; display: flex; flex-wrap: wrap; gap: 4px; }
+        nav.main-nav a {
+            color: #dbe6f3; text-decoration: none; font-size: .85rem;
+            padding: 7px 11px; border-radius: 8px;
+        }
+        nav.main-nav a:hover { background: rgba(255,255,255,.12); color: #fff; }
+        nav.main-nav a[aria-current="page"] { background: var(--accent); color: #fff; font-weight: 600; }
+        .interface-lang-select {
+            margin-left: 16px;
+            padding: 6px 10px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,.3);
+            background: rgba(255,255,255,.1);
+            color: #fff;
+            font-size: .85rem;
+            cursor: pointer;
+        }
+        .interface-lang-select option { background: var(--primary); color: #fff; }
+        main { max-width: 1100px; margin: 24px auto 48px; padding: 0 16px; }
+        h1 { font-size: 1.4rem; margin-bottom: 6px; }
+        .subtitle { color: var(--muted); font-size: .9rem; margin-bottom: 18px; }
+        .card {
+            background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+            padding: 18px; margin-bottom: 16px; overflow-x: auto;
+        }
+        table { border-collapse: collapse; width: 100%; font-size: .85rem; }
+        th, td { border-bottom: 1px solid var(--border); padding: 8px 10px; text-align: left; }
+        th { background: #eef3f8; font-weight: 600; white-space: nowrap; }
+        .badge {
+            display: inline-block; padding: 2px 9px; border-radius: 999px;
+            font-size: .72rem; font-weight: 600;
+        }
+        .badge.ok { background: #e3f4e8; color: var(--ok); }
+        .badge.warn { background: #fdf1df; color: var(--warn); }
+        .badge.bad { background: #fbe7e7; color: var(--bad); }
+        .status-loading { color: var(--muted); font-style: italic; padding: 18px; }
+        .status-error { color: var(--bad); padding: 18px; }
+        .notice {
+            background: #fdf6ec; border: 1px solid #f0dcb8; color: #7a5300;
+            padding: 10px 14px; border-radius: 10px; font-size: .85rem; margin-bottom: 16px;
+        }
+        .hero { padding: 72px 0 42px; max-width: 760px; }
+        .hero h1 { font-size: clamp(2.25rem, 6vw, 4.5rem); line-height: 1.02; letter-spacing: -.045em; margin: 10px 0 18px; }
+        .hero p { font-size: 1.08rem; color: var(--muted); max-width: 680px; }
+        .eyebrow { color: var(--accent); font-size: .78rem; font-weight: 750; text-transform: uppercase; letter-spacing: .08em; }
+        .hero-actions { display: flex; gap: 10px; margin-top: 24px; }
+        .feature-grid { display:grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+        .feature-grid h2, .auth-card h1 { font-size: 1.15rem; margin-bottom: 8px; }
+        .feature-grid p { color: var(--muted); font-size:.9rem; }
+        .auth-card { max-width: 460px; margin: 48px auto; }
+        .auth-form { display:grid; gap: 13px; margin-top:18px; }
+        .auth-form label { display:grid; gap:5px; font-size:.85rem; font-weight:650; }
+        .auth-form input { width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:9px; font:inherit; }
+        .password-wrap { position:relative; }.password-wrap input { padding-right:64px; }.text-btn { position:absolute; right:7px; top:7px; border:0; background:transparent; color:var(--primary); cursor:pointer; font-weight:650; }
+        .check { grid-template-columns:auto 1fr; align-items:start; font-weight:400 !important; }.check input { width:auto; margin-top:3px; }
+        footer { max-width: 1100px; margin: 0 auto; padding: 18px 16px; color: var(--muted); font-size: .78rem; }
+        @media (max-width: 640px) {
+            .header-inner { justify-content: center; }
+            nav.main-nav { margin-left: 0; justify-content: center; }
+            .interface-lang-select { margin-left: 0; margin-top: 8px; width: 100%; text-align: center; }
+            main { margin-top: 16px; }
+            .feature-grid { grid-template-columns:1fr; }.hero { padding-top:42px; }
+        }
+        @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+    </style>
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <header>
+        <div class="header-inner">
+            <a class="brand" href="/">{{ t('brand') }}<small>{{ t('tagline') }}</small></a>
+            <nav class="main-nav" aria-label="{{ t('nav_chat') }}">
+                <a href="/" {% block nav_chat %}{% endblock %}>{{ t('nav_chat') }}</a>
+                <a href="/dashboard" {% block nav_dashboard %}{% endblock %}>{{ t('nav_dashboard') }}</a>
+                <a href="/language-comparison" {% block nav_comparison %}{% endblock %}>{{ t('nav_comparison') }}</a>
+                <a href="/failure-analysis" {% block nav_failures %}{% endblock %}>{{ t('nav_failures') }}</a>
+                <a href="/about" {% block nav_about %}{% endblock %}>{{ t('nav_about') }}</a>
+            </nav>
+            {% if current_user() %}
+            <a class="btn secondary" style="padding:6px 10px" href="/settings">{{ current_user().name }}</a>
+            <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn secondary" style="padding:6px 10px">{{ t('auth_logout') }}</button></form>
+            {% else %}
+            <a class="btn secondary" style="padding:6px 10px" href="/signin">{{ t('auth_sign_in') }}</a>
+            {% endif %}
+            <select class="interface-lang-select" id="interfaceLangSelect" aria-label="{{ t('interface_language') }}" onchange="setInterfaceLang(this.value)">
+                {% for code, name in get_available_languages().items() %}
+                <option value="{{ code }}" {% if code == get_interface_lang() %}selected{% endif %}>{{ name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </header>
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+    <footer>
+        {{ t('footer') | safe }}
+    </footer>
+    {% block scripts %}
+    <script>
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = (input, init = {}) => {
+        const method = (init.method || 'GET').toUpperCase();
+        if (csrfToken && !['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(method)) {
+            const headers = new Headers(init.headers || {});
+            headers.set('X-CSRFToken', csrfToken);
+            init = { ...init, headers };
+        }
+        return nativeFetch(input, init);
+    };
+    // Interface language switching
+    function setInterfaceLang(lang) {
+        fetch('/api/set-interface-lang', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lang: lang })
+        }).then(() => {
+            window.location.reload();
+        }).catch(() => {
+            window.location.reload();
+        });
+    }
+    </script>
+    {% endblock %}
+</body>
+</html>

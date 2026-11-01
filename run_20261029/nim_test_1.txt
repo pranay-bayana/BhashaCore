@@ -1,0 +1,7 @@
+Test 1 - Capital of Japan:
+  Status: 200
+  Content: The capital of Japan is **Tokyo**.
+  Error: None
+  Latency: 150.5s
+  Has content: True
+

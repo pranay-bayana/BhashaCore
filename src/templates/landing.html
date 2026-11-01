@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}{{ t('landing_eyebrow') }}{% endblock %}
+{% block content %}
+<section class="hero">
+  <span class="eyebrow">{{ t('landing_eyebrow') }}</span>
+  <h1>{{ t('landing_title') }}</h1><p>{{ t('landing_copy') }}</p>
+  <div class="hero-actions">
+    {% if current_user() %}<a class="btn" href="/chat">{{ t('landing_open') }}</a>{% else %}<a class="btn" href="/signup">{{ t('landing_start') }}</a><a class="btn secondary" href="/signin">{{ t('auth_sign_in') }}</a>{% endif %}
+  </div>
+</section>
+<section class="feature-grid">
+  <article class="card"><h2>{{ t('landing_languages') }}</h2><p>{{ t('landing_languages_copy') }}</p></article>
+  <article class="card"><h2>{{ t('landing_evidence') }}</h2><p>{{ t('landing_evidence_copy') }}</p></article>
+  <article class="card"><h2>{{ t('landing_research') }}</h2><p>{{ t('landing_research_copy') }}</p></article>
+</section>
+{% endblock %}

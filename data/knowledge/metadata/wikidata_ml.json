@@ -1,0 +1,9 @@
+{
+  "name": "Wikidata",
+  "url": "https://www.wikidata.org/",
+  "license": "CC0 1.0 Universal",
+  "language": "ml",
+  "download_date": "2026-10-29T12:37:39.848197+00:00",
+  "record_count": 20,
+  "notes": "40 entities fetched, 20 passages extracted"
+}

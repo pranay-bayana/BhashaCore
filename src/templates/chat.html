@@ -1,0 +1,618 @@
+{% extends "base.html" %}
+{% block title %}{{ t('chat_title') }}{% endblock %}
+{% block nav_chat %}aria-current="page"{% endblock %}
+
+{% block head %}
+<style>
+    .chat-layout { display: flex; gap: 16px; align-items: stretch; }
+    .chat-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    .chat-side { width: 260px; flex-shrink: 0; }
+    .chat-window {
+        background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+        display: flex; flex-direction: column; height: 72vh; min-height: 460px;
+    }
+    .chat-head {
+        padding: 10px 14px; border-bottom: 1px solid var(--border);
+        display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    }
+    .chat-head h1 { font-size: 1.05rem; margin: 0; }
+    .lang-badge {
+        background: #eef3f8; border-radius: 999px; padding: 2px 10px;
+        font-size: .75rem; font-weight: 600;
+    }
+    .messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+    .msg { max-width: 85%; border-radius: 14px; padding: 10px 13px; font-size: .92rem; word-wrap: break-word; }
+    .msg.user { background: var(--primary-light); color: #fff; align-self: flex-end; }
+    .msg.bot { background: #f4f8fc; border: 1px solid var(--border); align-self: flex-start; min-width: 60%; }
+    .msg .meta { font-size: .7rem; color: var(--muted); margin-top: 6px; }
+    .msg .status-line { font-size: .72rem; margin-top: 6px; font-weight: 600; }
+    .status-answered { color: var(--ok); }
+    .status-insufficient_evidence { color: var(--warn); }
+    .status-error { color: var(--bad); }
+    .sources-btn {
+        margin-top: 8px; background: none; border: 1px solid var(--border); color: var(--primary);
+        border-radius: 8px; padding: 4px 10px; font-size: .75rem; cursor: pointer; font-weight: 600;
+    }
+    .sources-btn:hover { border-color: var(--primary); }
+    .sources-list { margin-top: 8px; display: none; }
+    .sources-list.show { display: block; }
+    .source-item {
+        border: 1px solid var(--border); border-left: 4px solid var(--primary-light);
+        border-radius: 8px; padding: 8px 10px; margin-top: 6px; font-size: .78rem; background: #fff;
+    }
+    .source-item.not-used { border-left-color: #c9a227; opacity: .95; }
+    .source-item .src-tag { font-size: .68rem; color: var(--muted); margin-top: 4px; }
+    .composer { border-top: 1px solid var(--border); padding: 12px; display: flex; gap: 8px; }
+    .composer textarea {
+        flex: 1; resize: none; border: 1px solid var(--border); border-radius: 12px;
+        padding: 10px 12px; font: inherit; font-size: .92rem; min-height: 46px; max-height: 140px;
+    }
+    .composer textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .btn {
+        border: none; border-radius: 12px; padding: 10px 18px; font-size: .88rem; font-weight: 600;
+        cursor: pointer; background: var(--primary); color: #fff; white-space: nowrap;
+    }
+    .btn:hover { background: var(--primary-light); }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .btn.secondary { background: #fff; color: var(--primary); border: 1px solid var(--border); }
+    .btn.danger { background: var(--bad); }
+    .lang-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .lang-btn {
+        border: 1px solid var(--border); background: #fff; border-radius: 10px;
+        padding: 8px 6px; font-size: .8rem; cursor: pointer; text-align: center;
+    }
+    .lang-btn:hover { border-color: var(--primary); }
+    .lang-btn[aria-pressed="true"] { background: var(--primary); color: #fff; border-color: var(--primary); font-weight: 700; }
+    .style-row { display: flex; gap: 6px; margin-top: 10px; }
+    .style-btn {
+        flex: 1; border: 1px solid var(--border); background: #fff; border-radius: 8px;
+        padding: 6px 4px; font-size: .72rem; cursor: pointer;
+    }
+    .style-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); font-weight: 700; }
+    .mini-label { display: block; font-size: .72rem; color: var(--muted); margin-bottom: 4px; }
+    .session-card select {
+        width: 100%; padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px;
+        background: #fff; font-size: .8rem; margin-bottom: 4px;
+    }
+    .example-card, .session-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 14px; }
+    .example-card h3, .session-card h3 { font-size: .85rem; margin-bottom: 8px; }
+    .example-q {
+        display: block; width: 100%; text-align: left; background: #f4f8fc; border: 1px solid var(--border);
+        border-radius: 8px; padding: 7px 9px; font-size: .78rem; margin-bottom: 6px; cursor: pointer; color: var(--text); font-family: inherit;
+    }
+    .example-q:hover { border-color: var(--primary); background: #eaf2fb; }
+    .empty-state { text-align: center; color: var(--muted); padding: 30px 10px; }
+    .empty-state .globe { font-size: 2rem; }
+    .hint { font-size: .75rem; color: var(--muted); margin-top: 8px; }
+    @media (max-width: 860px) {
+        .chat-layout { flex-direction: column; }
+        .chat-side { width: 100%; }
+        .chat-window { height: 66vh; }
+        .lang-grid { display: flex; flex-wrap: wrap; }
+        .lang-btn { flex: 1 1 30%; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="chat-layout">
+    <div class="chat-main">
+        <div class="chat-window">
+            <div class="chat-head">
+                <h1>{{ t('chat_title') }}</h1>
+                <span class="lang-badge" id="langBadge" data-lang="auto">{{ t('chat_auto_detect') }}</span>
+                <span style="font-size:.7rem;color:var(--muted)">{{ generator }}</span>
+            </div>
+            <div class="messages" id="messages" role="log" aria-live="polite" aria-label="{{ t('chat_aria_question') }}">
+                <div class="empty-state" id="emptyState">
+                    <div class="globe">&#127760;</div>
+                    <p><strong>{{ t('chat_ask_anything') }}</strong></p>
+                    <p style="font-size:.82rem">{{ t('chat_ask_subtitle') }}</p>
+                </div>
+            </div>
+            <div class="composer">
+                <textarea id="questionInput" rows="1" placeholder="{{ t('chat_input_placeholder') }}"
+                    aria-label="{{ t('chat_aria_question') }}"></textarea>
+                <button class="btn" id="sendBtn" aria-label="{{ t('chat_send') }}">{{ t('chat_send') }}</button>
+                <button class="btn danger" id="stopBtn" aria-label="{{ t('chat_stop') }}" style="display:none">{{ t('chat_stop') }}</button>
+                <button class="btn secondary" id="retryBtn" aria-label="{{ t('chat_retry') }}" style="display:none">{{ t('chat_retry') }}</button>
+            </div>
+        </div>
+        <p class="hint">{{ t('chat_hint') }}</p>
+    </div>
+
+    <aside class="chat-side" aria-label="Chat controls">
+        <div class="session-card">
+            <h3>{{ t('session_title') }}</h3>
+            <div class="lang-grid" role="group" aria-label="{{ t('session_select_lang') }}">
+                <button class="lang-btn" data-lang="auto" aria-pressed="true" onclick="setInputLang('auto')">{{ t('chat_auto_detect') }}</button>
+                {% for code, meta in languages.items() %}
+                <button class="lang-btn" data-lang="{{ code }}" aria-pressed="false"
+                    onclick="setInputLang('{{ code }}')">{{ code|upper }} · {{ meta.name }}</button>
+                {% endfor %}
+            </div>
+            <div class="style-row" role="group" aria-label="{{ t('session_style_title') }}">
+                <button class="style-btn active" data-style="auto" onclick="setInputStyle('auto')">{{ t('session_style_auto') }}</button>
+                <button class="style-btn" data-style="native" onclick="setInputStyle('native')">{{ t('session_style_native') }}</button>
+                <button class="style-btn" data-style="romanized" onclick="setInputStyle('romanized')">{{ t('session_style_romanized') }}</button>
+            </div>
+            <h3 style="margin-top:14px">{{ t('session_answer_title') }}</h3>
+            <label class="mini-label" for="answerLang">{{ t('session_answer_lang') }}</label>
+            <select id="answerLang" aria-label="{{ t('session_answer_lang') }}" onchange="setAnswerLang(this.value)">
+                <option value="auto">{{ t('session_answer_lang_auto') }}</option>
+                <option value="en">{{ t('session_answer_lang_en') }}</option>
+                <option value="hi">{{ t('session_answer_lang_hi') }}</option>
+                <option value="ta">{{ t('session_answer_lang_ta') }}</option>
+                <option value="te">{{ t('session_answer_lang_te') }}</option>
+                <option value="kn">{{ t('session_answer_lang_kn') }}</option>
+                <option value="ml">{{ t('session_answer_lang_ml') }}</option>
+            </select>
+            <label class="mini-label" for="answerScript" style="margin-top:8px">{{ t('session_answer_script') }}</label>
+            <select id="answerScript" aria-label="{{ t('session_answer_script') }}" onchange="setAnswerScript(this.value)">
+                <option value="native">{{ t('session_script_native') }}</option>
+                <option value="romanized">{{ t('session_script_romanized') }}</option>
+                <option value="latin">{{ t('session_script_latin') }}</option>
+            </select>
+            <h3 style="margin-top:14px">{{ t('session_session_title') }}</h3>
+            <button class="btn secondary" style="width:100%" onclick="newChat()">{{ t('session_new_chat') }}</button>
+        </div>
+        {% if authenticated %}
+        <div class="session-card">
+            <h3>{{ t('auth_history') }}</h3><div id="historyList" class="hint">{{ t('auth_loading_history') }}</div>
+        </div>
+        {% endif %}
+        <div class="example-card">
+            <h3>{{ t('examples_title') }}</h3>
+            {% for lang, qs in examples.items() %}
+                {% for item in qs[:1] %}
+                <button class="example-q" onclick="useExample('{{ lang }}', this.textContent)"
+                    title="{{ t('session_answer_lang') }} {{ languages[lang].name }}">{{ item.question }}</button>
+                {% endfor %}
+            {% endfor %}
+        </div>
+        <div class="example-card">
+            <h3>{{ t('playground_title') }}</h3>
+            <p style="font-size:.68rem;color:var(--muted);margin-bottom:8px">{{ t('playground_subtitle') }}</p>
+            <button class="example-q" onclick="usePreset('en','native', this.textContent)" title="{{ t('session_answer_lang_en') }}">What are you doing?</button>
+            <button class="example-q" onclick="usePreset('te','native', this.textContent)" title="{{ t('session_answer_lang_te') }}">ఏం చేస్తున్నావు?</button>
+            <button class="example-q" onclick="usePreset('te','romanized', this.textContent)" title="{{ t('session_answer_lang_te') }}">em chestunnav?</button>
+            <button class="example-q" onclick="usePreset('hi','native', this.textContent)" title="{{ t('session_answer_lang_hi') }}">तुम क्या कर रहे हो?</button>
+            <button class="example-q" onclick="usePreset('hi','romanized', this.textContent)" title="{{ t('session_answer_lang_hi') }}">mera naam Pranay hai</button>
+            <button class="example-q" onclick="usePreset('ta','romanized', this.textContent)" title="{{ t('session_answer_lang_ta') }}">Enna seigirai?</button>
+            <button class="example-q" onclick="usePreset('kn','romanized', this.textContent)" title="{{ t('session_answer_lang_kn') }}">Enu maduttiddiya?</button>
+            <button class="example-q" onclick="usePreset('ml','romanized', this.textContent)" title="{{ t('session_answer_lang_ml') }}">Nee enthu cheyyunnu?</button>
+        </div>
+    </aside>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Translation strings for UI (populated server-side)
+const T = {
+    chat_auto_detect: {{ t('chat_auto_detect') | tojson }},
+    chat_input_placeholder: {{ t('chat_input_placeholder') | tojson }},
+    chat_send: {{ t('chat_send') | tojson }},
+    chat_stop: {{ t('chat_stop') | tojson }},
+    chat_retry: {{ t('chat_retry') | tojson }},
+    chat_hint: {{ t('chat_hint') | tojson }},
+    session_title: {{ t('session_title') | tojson }},
+    session_select_lang: {{ t('session_select_lang') | tojson }},
+    session_style_title: {{ t('session_style_title') | tojson }},
+    session_style_auto: {{ t('session_style_auto') | tojson }},
+    session_style_native: {{ t('session_style_native') | tojson }},
+    session_style_romanized: {{ t('session_style_romanized') | tojson }},
+    session_answer_title: {{ t('session_answer_title') | tojson }},
+    session_answer_lang: {{ t('session_answer_lang') | tojson }},
+    session_answer_lang_auto: {{ t('session_answer_lang_auto') | tojson }},
+    session_answer_lang_en: {{ t('session_answer_lang_en') | tojson }},
+    session_answer_lang_hi: {{ t('session_answer_lang_hi') | tojson }},
+    session_answer_lang_ta: {{ t('session_answer_lang_ta') | tojson }},
+    session_answer_lang_te: {{ t('session_answer_lang_te') | tojson }},
+    session_answer_lang_kn: {{ t('session_answer_lang_kn') | tojson }},
+    session_answer_lang_ml: {{ t('session_answer_lang_ml') | tojson }},
+    session_answer_script: {{ t('session_answer_script') | tojson }},
+    session_script_native: {{ t('session_script_native') | tojson }},
+    session_script_romanized: {{ t('session_script_romanized') | tojson }},
+    session_script_latin: {{ t('session_script_latin') | tojson }},
+    session_session_title: {{ t('session_session_title') | tojson }},
+    session_new_chat: {{ t('session_new_chat') | tojson }},
+    examples_title: {{ t('examples_title') | tojson }},
+    playground_title: {{ t('playground_title') | tojson }},
+    playground_subtitle: {{ t('playground_subtitle') | tojson }},
+    status_searching: {{ t('status_searching') | tojson }},
+    status_answered_single: {{ t('status_answered', count=1, plural="") | tojson }},
+    status_answered_plural: {{ t('status_answered', count=2, plural="s") | tojson }},
+    status_stopped: {{ t('status_stopped') | tojson }},
+    status_insufficient: {{ t('status_insufficient') | tojson }},
+    sources_used: {{ t('sources_used', count=0) | tojson }},
+    sources_none_used: {{ t('sources_none_used') | tojson }},
+    sources_used_for_answer: {{ t('sources_used_for_answer') | tojson }},
+    sources_reference_only: {{ t('sources_reference_only') | tojson }},
+    sources_support: {{ t('sources_support', sup=0) | tojson }},
+    language_processing: {{ t('language_processing') | tojson }},
+    language_detected_script: {{ t('language_detected_script', script="Latin") | tojson }},
+    language_ambiguous: {{ t('language_ambiguous') | tojson }},
+    language_style_romanized: {{ t('language_style_romanized') | tojson }},
+    language_bridged_query: {{ t('language_bridged_query', query="test") | tojson }},
+    generation_stopped: {{ t('generation_stopped') | tojson }},
+    generation_stopped_partial: {{ t('generation_stopped_partial') | tojson }},
+    error_generic: {{ t('error_generic', message="{msg}") | tojson }},
+    error_stream_end: {{ t('error_stream_end') | tojson }},
+};
+const LANG_NAMES = {{ get_available_languages() | tojson }};
+const messagesEl = document.getElementById('messages');
+const inputEl = document.getElementById('questionInput');
+const sendBtn = document.getElementById('sendBtn');
+const stopBtn = document.getElementById('stopBtn');
+const retryBtn = document.getElementById('retryBtn');
+const langBadge = document.getElementById('langBadge');
+const emptyState = document.getElementById('emptyState');
+
+let sessionId = 'sess-' + Date.now();
+let currentInputLang = 'auto';   // 'auto' | en|hi|ta|te|kn|ml
+let currentInputStyle = 'auto'; // 'auto' | 'native' | 'romanized'
+let currentAnswerLang = 'auto'; // 'auto' (same as input) | en|hi|ta|te|kn|ml
+let currentAnswerScript = 'native'; // 'native' | 'romanized' | 'latin'
+let lastQuestion = '';
+let activeController = null;
+
+// restore persisted preferences (session-scoped convenience only)
+try {
+    const saved = JSON.parse(localStorage.getItem('bhashacore-prefs') || '{}');
+    if (saved.inputStyle) { currentInputStyle = saved.inputStyle; setInputStyleUI(currentInputStyle); }
+    if (saved.answerLang) { currentAnswerLang = saved.answerLang; document.getElementById('answerLang').value = saved.answerLang; }
+    if (saved.answerScript) { currentAnswerScript = saved.answerScript; document.getElementById('answerScript').value = saved.answerScript; }
+} catch (e) { /* preferences are best-effort */ }
+
+function persistPrefs() {
+    try {
+        localStorage.setItem('bhashacore-prefs', JSON.stringify({
+            inputStyle: currentInputStyle, answerLang: currentAnswerLang, answerScript: currentAnswerScript
+        }));
+    } catch (e) { /* best-effort */ }
+}
+
+function setInputLangUI(code) {
+    document.querySelectorAll('.lang-btn').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === code)));
+}
+
+function setInputStyleUI(style) {
+    document.querySelectorAll('.style-btn').forEach(b => b.classList.toggle('active', b.dataset.style === style));
+}
+
+function setInputLang(code) {
+    currentInputLang = code;
+    setInputLangUI(code);
+    const badge = document.getElementById('langBadge');
+    const langName = LANG_NAMES[code] || code;
+    badge.textContent = code === 'auto' ? T.chat_auto_detect : code.toUpperCase() + ' · ' + langName;
+    badge.dataset.lang = code;
+    inputEl.placeholder = code === 'auto' ? T.chat_input_placeholder : 'Ask in ' + badge.textContent + '…';
+}
+
+function setInputStyle(style) {
+    currentInputStyle = style;
+    setInputStyleUI(style);
+    persistPrefs();
+}
+
+function setAnswerLang(value) {
+    currentAnswerLang = value;
+    persistPrefs();
+}
+
+function setAnswerScript(value) {
+    currentAnswerScript = value;
+    persistPrefs();
+}
+
+function useExample(lang, question) {
+    setInputLang(lang);
+    setInputStyle('native');
+    inputEl.value = question.trim();
+    sendQuestion();
+}
+
+function usePreset(lang, style, question) {
+    setInputLang(lang);
+    setInputStyle(style);
+    inputEl.value = question.trim();
+    sendQuestion();
+}
+
+function clearEmptyState() {
+    if (emptyState) emptyState.remove();
+}
+
+function addMessage(cls, text) {
+    clearEmptyState();
+    const div = document.createElement('div');
+    div.className = 'msg ' + cls;
+    div.textContent = text;
+    messagesEl.appendChild(div);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    return div;
+}
+
+async function sendQuestion() {
+    const question = inputEl.value.trim();
+    if (!question || activeController) return;
+
+    lastQuestion = question;
+    addMessage('user', question);
+    inputEl.value = '';
+    inputEl.disabled = true;
+    sendBtn.disabled = true;
+    stopBtn.style.display = '';
+    retryBtn.style.display = 'none';
+
+    const botMsg = addMessage('bot', '');
+    botMsg.innerHTML = '<span class="status-line">' + T.status_searching + '</span>';
+
+    activeController = new AbortController();
+    let buffer = '';
+    let answer = '';
+    let sawDelta = false;
+
+    try {
+        const resp = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                session_id: sessionId,
+                input_lang: currentInputLang,
+                input_style: currentInputStyle,
+                answer_lang: currentAnswerLang === 'auto' ? null : currentAnswerLang,
+                answer_script: currentAnswerScript,
+                question: question,
+                mode: 'rag'
+            }),
+            signal: activeController.signal
+        });
+        if (!resp.ok || !resp.body) {
+            const errText = await resp.text().catch(() => '');
+            throw new Error('Request failed (' + resp.status + ') ' + errText.slice(0, 120));
+        }
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop();
+            for (const line of lines) {
+                if (!line.trim()) continue;
+                let ev;
+                try { ev = JSON.parse(line); } catch (e) { continue; }
+                if (ev.type === 'delta') {
+                    sawDelta = true;
+                    answer += ev.text;
+                    botMsg.textContent = answer;
+                    messagesEl.scrollTop = messagesEl.scrollHeight;
+                } else if (ev.type === 'done') {
+                    renderDone(botMsg, ev);
+                    return finish();
+                } else if (ev.type === 'error') {
+                    throw new Error(ev.error || 'unknown error');
+                }
+            }
+        }
+        // Stream ended without a done event -> never show it as a completed answer.
+        throw new Error(T.error_stream_end);
+    } catch (err) {
+        const aborted = err && err.name === 'AbortError';
+        botMsg.innerHTML = '';
+        botMsg.textContent = aborted ? T.generation_stopped : '';
+        if (!aborted) {
+            const statusLine = document.createElement('div');
+            statusLine.className = 'status-line status-error';
+            statusLine.textContent = T.error_generic.replace('{message}', err.message || err);
+            botMsg.appendChild(statusLine);
+            retryBtn.style.display = '';
+        } else {
+            const statusLine = document.createElement('div');
+            statusLine.className = 'status-line';
+            statusLine.textContent = T.generation_stopped_partial;
+            botMsg.appendChild(statusLine);
+            retryBtn.style.display = '';
+        }
+    } finally {
+        finish();
+    }
+
+    function finish() {
+        activeController = null;
+        inputEl.disabled = false;
+        sendBtn.disabled = false;
+        stopBtn.style.display = 'none';
+        inputEl.focus();
+    }
+}
+
+function renderDone(botMsg, ev) {
+    const cited = (ev.citations || []);
+    const usedCount = cited.filter(c => c.used).length;
+    botMsg.innerHTML = '';
+    const answerEl = document.createElement('div');
+    answerEl.className = 'answer-text';
+    answerEl.textContent = ev.answer || '';
+    botMsg.appendChild(answerEl);
+
+    const statusLine = document.createElement('div');
+    statusLine.className = 'status-line status-' + ev.status;
+    if (ev.status === 'answered') {
+        const count = usedCount;
+        const plural = count === 1 ? '' : 's';
+        statusLine.textContent = T.status_answered_single.replace('{count}', String(count)).replace('{plural}', plural);
+    } else if (ev.status === 'stopped') {
+        statusLine.textContent = T.status_stopped;
+    } else {
+        statusLine.textContent = T.status_insufficient;
+    }
+    botMsg.appendChild(statusLine);
+
+    if (cited.length > 0) {
+        const btn = document.createElement('button');
+        btn.className = 'sources-btn';
+        const usedLabel = usedCount > 0
+            ? usedCount + ' ' + T.sources_used.replace('{count}', String(usedCount))
+            : T.sources_none_used;
+        btn.textContent = T.sources_label
+            .replace('{total}', String(cited.length))
+            .replace('{usedLabel}', usedLabel);
+        btn.setAttribute('aria-expanded', 'false');
+        const list = document.createElement('div');
+        list.className = 'sources-list';
+        cited.forEach(c => {
+            const item = document.createElement('div');
+            item.className = 'source-item' + (c.used ? '' : ' not-used');
+            const txt = document.createElement('div');
+            txt.textContent = '[' + c.rank + '] ' + c.text;
+            item.appendChild(txt);
+            const tag = document.createElement('div');
+            tag.className = 'src-tag';
+            const sup = (typeof c.support === 'number') ? Math.round(c.support * 100) : null;
+            const supLabel = sup === null ? '' : ' · ' + T.sources_support.replace('{sup}', String(sup));
+            const usedTag = c.used ? ' · ' + T.sources_used_for_answer : ' · ' + T.sources_reference_only;
+            tag.textContent = c.pid + ' · ' + c.source + ' · スコア ' + c.score + supLabel + usedTag;
+            item.appendChild(tag);
+            list.appendChild(item);
+        });
+        btn.onclick = () => {
+            const open = list.classList.toggle('show');
+            btn.setAttribute('aria-expanded', String(open));
+            btn.textContent = (open ? '▾' : '▸') + btn.textContent.slice(1);
+        };
+        botMsg.appendChild(btn);
+        botMsg.appendChild(list);
+    }
+
+    if (ev.translation_note) {
+        const note = document.createElement('div');
+        note.className = 'status-line';
+        note.style.color = 'var(--warn)';
+        note.textContent = ev.translation_note;
+        botMsg.appendChild(note);
+    }
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    const inLang = (ev.input_lang || '').toUpperCase();
+    const ansLang = (ev.answer_lang || '').toUpperCase();
+    const langPart = ansLang !== inLang ? inLang + ' → ' + ansLang + ' (' + ev.answer_script + ')' : inLang + ' (' + ev.answer_script + ')';
+    meta.textContent = langPart + ' · ' + (ev.model || '') + ' · ' + (ev.latency_ms || 0) + ' ms';
+    botMsg.appendChild(meta);
+
+    // Expandable language-processing details (kept out of the way by default)
+    const hasDetails = ev.bridged_query || ev.input_ambiguous || ev.input_detected_script;
+    if (hasDetails) {
+        const detBtn = document.createElement('button');
+        detBtn.className = 'sources-btn';
+        detBtn.textContent = T.language_processing;
+        detBtn.setAttribute('aria-expanded', 'false');
+        const detList = document.createElement('div');
+        detList.className = 'sources-list';
+        const detLines = [];
+        detLines.push(T.language_detected_script.replace('{script}', ev.input_detected_script || '—'));
+        if (ev.input_ambiguous) detLines.push(T.language_ambiguous);
+        if (ev.input_style === 'romanized') detLines.push(T.language_style_romanized);
+        if (ev.bridged_query) detLines.push(T.language_bridged_query.replace('{query}', ev.bridged_query));
+        detLines.forEach(l => {
+            const item = document.createElement('div');
+            item.className = 'source-item';
+            item.textContent = l;   // textContent — never innerHTML for user-derived text
+            detList.appendChild(item);
+        });
+        detBtn.onclick = () => {
+            const open = detList.classList.toggle('show');
+            detBtn.setAttribute('aria-expanded', String(open));
+            detBtn.textContent = (open ? '▾' : '▸') + detBtn.textContent.slice(1);
+        };
+        botMsg.appendChild(detBtn);
+        botMsg.appendChild(detList);
+    }
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function stopGeneration() {
+    if (activeController) activeController.abort();
+    fetch('/api/stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId })
+    });
+}
+
+function retryLast() {
+    if (lastQuestion) {
+        inputEl.value = lastQuestion;
+        retryBtn.style.display = 'none';
+        sendQuestion();
+    }
+}
+
+async function newChat() {
+    if (activeController) activeController.abort();
+    try {
+        await fetch('/api/new-chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id: sessionId })
+        });
+    } catch (e) { /* session reset is best-effort */ }
+    sessionId = 'sess-' + Date.now();
+    messagesEl.innerHTML = '';
+    lastQuestion = '';
+    retryBtn.style.display = 'none';
+    inputEl.value = '';
+    inputEl.focus();
+    if (typeof loadHistory === 'function') loadHistory();
+}
+
+{% if authenticated %}
+const HISTORY_T = {{ {'empty': t('auth_no_history'), 'rename': t('auth_rename'), 'delete': t('auth_delete'), 'error': t('auth_history_error'), 'title': t('auth_title'), 'confirm': t('auth_delete_confirm')} | tojson }};
+async function loadHistory() {
+    const el = document.getElementById('historyList');
+    try {
+        const response = await fetch('/api/history'); const data = await response.json();
+        el.innerHTML = '';
+        if (!data.histories.length) { el.textContent = HISTORY_T.empty; return; }
+        data.histories.forEach(item => {
+            const row = document.createElement('div'); row.style.marginBottom = '7px';
+            const open = document.createElement('button'); open.className = 'example-q'; open.textContent = item.title || item.session_id;
+            open.onclick = () => loadConversation(item.session_id); row.appendChild(open);
+            const rename = document.createElement('button'); rename.className = 'text-btn'; rename.textContent = HISTORY_T.rename;
+            rename.onclick = () => renameConversation(item.session_id, item.title || 'New chat'); row.appendChild(rename);
+            const remove = document.createElement('button'); remove.className = 'text-btn'; remove.textContent = HISTORY_T.delete;
+            remove.onclick = () => deleteConversation(item.session_id); row.appendChild(remove); el.appendChild(row);
+        });
+    } catch { el.textContent = HISTORY_T.error; }
+}
+async function loadConversation(id) {
+    const response = await fetch('/api/load-chat', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({session_id:id})});
+    if (!response.ok) return; const data = await response.json(); sessionId=id; messagesEl.innerHTML='';
+    data.session.messages.filter(m=>m.role!=='system').forEach(m=>addMessage(m.role === 'assistant' ? 'bot':'user', m.content));
+}
+async function renameConversation(id, current) { const title = prompt(HISTORY_T.title, current); if (!title) return; await fetch('/api/conversations/'+encodeURIComponent(id), {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({title})}); loadHistory(); }
+async function deleteConversation(id) { if (!confirm(HISTORY_T.confirm)) return; await fetch('/api/conversations/'+encodeURIComponent(id), {method:'DELETE'}); if (id===sessionId) newChat(); loadHistory(); }
+loadHistory();
+{% endif %}
+
+inputEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendQuestion();
+    }
+});
+sendBtn.addEventListener('click', sendQuestion);
+stopBtn.addEventListener('click', stopGeneration);
+retryBtn.addEventListener('click', retryLast);
+
+// initialize the input-language UI state (auto-detect by default)
+setInputLang('auto');
+setInputStyleUI(currentInputStyle);
+</script>
+{% endblock %}

@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}{{ t('nav_dashboard') }}{% endblock %}
+{% block nav_dashboard %}aria-current="page"{% endblock %}
+
+{% block content %}
+<h1>{{ t('nav_dashboard') }}</h1>
+<p class="subtitle">{{ t('dashboard_live_view', generator=generator) }}</p>
+
+<div id="status" class="status-loading" role="status">{{ t('dashboard_loading') }}</div>
+<div id="content" style="display:none">
+    <div class="card" id="countsCard"></div>
+    <div class="card">
+        <h2 style="font-size:1rem;margin-bottom:10px">{{ t('dashboard_answer_quality') }}</h2>
+        <p style="font-size:.8rem;color:var(--muted);margin-bottom:10px">
+            {{ t('dashboard_answer_quality_desc') }}
+        </p>
+        <div style="overflow-x:auto">
+            <table id="qualityTable">
+                <thead><tr><th>{{ t('dashboard_language') }}</th><th>{{ t('dashboard_closed_book') }}</th><th>{{ t('dashboard_gold_context') }}</th><th>{{ t('dashboard_rag') }}</th><th>{{ t('dashboard_rag_translit') }}</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+    <div class="card">
+        <h2 style="font-size:1rem;margin-bottom:10px">{{ t('dashboard_retrieval_quality') }}</h2>
+        <div style="overflow-x:auto">
+            <table id="retrievalTable">
+                <thead><tr><th>{{ t('dashboard_language') }}</th><th>{{ t('dashboard_recall_native') }}</th><th>{{ t('dashboard_mrr_native') }}</th><th>{{ t('dashboard_recall_romanized') }}</th><th>{{ t('dashboard_mrr_romanized') }}</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+const LANG_NAMES = {{ get_available_languages() | tojson }};
+const MODE_ORDER = ['closed_book', 'gold_context', 'rag', 'rag_translit'];
+
+function cell(v, n) {
+    if (v === null || v === undefined) return '<td>—</td>';
+    let cls = 'badge ok';
+    if (v < 2) cls = 'badge bad'; else if (v < 4) cls = 'badge warn';
+    return `<td><span class="${cls}">${v.toFixed(2)}</span> <span style="color:var(--muted);font-size:.72rem">(n=${n})</span></td>`;
+}
+
+fetch('/api/dashboard').then(r => {
+    if (!r.ok) throw new Error('{{ t('dashboard_api_failed') }}: ' + r.status);
+    return r.json();
+}).then(data => {
+    document.getElementById('status').style.display = 'none';
+    document.getElementById('content').style.display = '';
+
+    const c = data.counts;
+    document.getElementById('countsCard').innerHTML = `
+        <div style="display:flex;gap:26px;flex-wrap:wrap;text-align:center">
+            <div><div style="font-size:1.6rem;font-weight:700">${c.judged}</div><div style="font-size:.75rem;color:var(--muted)">{{ t('dashboard_judged_answers') }}</div></div>
+            <div><div style="font-size:1.6rem;font-weight:700;color:var(--bad)">${c.failures}</div><div style="font-size:.75rem;color:var(--muted)">{{ t('dashboard_failures') }}</div></div>
+            <div><div style="font-size:1.6rem;font-weight:700">${c.languages}</div><div style="font-size:.75rem;color:var(--muted)">{{ t('dashboard_languages') }}</div></div>
+            <div><div style="font-size:1.6rem;font-weight:700">${c.retrieval_rows}</div><div style="font-size:.75rem;color:var(--muted)">{{ t('dashboard_retrieval_evaluations') }}</div></div>
+        </div>
+        <p style="font-size:.78rem;color:var(--muted);margin-top:12px" id="generator-info"></p>`;
+
+    const tbody = document.querySelector('#qualityTable tbody');
+    tbody.innerHTML = '';
+    for (const [lang, modes] of Object.entries(data.by_language)) {
+        const row = document.createElement('tr');
+        let html = `<td><strong>${(LANG_NAMES[lang] || lang)}</strong></td>`;
+        for (const mode of MODE_ORDER) {
+            const m = modes[mode];
+            html += m ? cell(m.correctness, m.n) : '<td>—</td>';
+        }
+        row.innerHTML = html;
+        tbody.appendChild(row);
+    }
+
+    const genInfo = document.getElementById('generator-info');
+    genInfo.textContent = `{{ t('dashboard_generator', generator='GEN', judge='JUDGE', generator_active='ACTIVE') }}`
+        .replace('GEN', data.generator)
+        .replace('JUDGE', data.judge_model || '—')
+        .replace('ACTIVE', data.generator_active);
+
+    const rt = document.querySelector('#retrievalTable tbody');
+    rt.innerHTML = '';
+    const byLang = {};
+    (data.retrieval || []).forEach(r => { (byLang[r.lang] = byLang[r.lang] || {})[r.mode] = r; });
+    for (const [lang, modes] of Object.entries(byLang)) {
+        const native = modes.rag || {}, roman = modes.rag_translit || {};
+        const rr = document.createElement('tr');
+        rr.innerHTML = `
+            <td><strong>${(LANG_NAMES[lang] || lang)}</strong></td>
+            <td>${native['recall@5'] !== undefined ? (+native['recall@5']).toFixed(2) : '—'}</td>
+            <td>${native['mrr@10'] !== undefined ? (+native['mrr@10']).toFixed(2) : '—'}</td>
+            <td>${roman['recall@5'] !== undefined ? (+roman['recall@5']).toFixed(2) : '—'}</td>
+            <td>${roman['mrr@10'] !== undefined ? (+roman['mrr@10']).toFixed(2) : '—'}</td>`;
+        rt.appendChild(rr);
+    }
+    if (rt.children.length === 0) rt.innerHTML = '<tr><td colspan="5">{{ t('dashboard_no_retrieval') }}</td></tr>';
+}).catch(err => {
+    document.getElementById('status').className = 'status-error';
+    document.getElementById('status').textContent = '{{ t('dashboard_could_not_load') }}: ' + err.message;
+});
+</script>
+{% endblock %}

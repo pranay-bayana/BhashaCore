@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}{{ t('nav_failures') }}{% endblock %}
+{% block nav_failures %}aria-current="page"{% endblock %}
+
+{% block content %}
+<h1>{{ t('nav_failures') }}</h1>
+<p class="subtitle">{{ t('failure_subtitle', generator=generator) }}</p>
+
+<div class="card">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <label style="font-size:.8rem" for="langFilter">{{ t('failure_language') }}</label>
+        <select id="langFilter" aria-label="{{ t('failure_language') }}">
+            <option value="">{{ t('failure_all_languages') }}</option>
+            <option value="en">{{ t('session_answer_lang_en') }}</option>
+            <option value="hi">{{ t('session_answer_lang_hi') }}</option>
+            <option value="ta">{{ t('session_answer_lang_ta') }}</option>
+            <option value="te">{{ t('session_answer_lang_te') }}</option>
+            <option value="kn">{{ t('session_answer_lang_kn') }}</option>
+            <option value="ml">{{ t('session_answer_lang_ml') }}</option>
+        </select>
+        <label style="font-size:.8rem" for="modeFilter">{{ t('failure_mode') }}</label>
+        <select id="modeFilter" aria-label="{{ t('failure_mode') }}">
+            <option value="">{{ t('failure_all_modes') }}</option>
+            <option value="closed_book">{{ t('comparison_closed_book') }}</option>
+            <option value="gold_context">{{ t('comparison_gold_context') }}</option>
+            <option value="rag">{{ t('comparison_rag') }}</option>
+            <option value="rag_translit">{{ t('comparison_rag_translit') }}</option>
+        </select>
+        <button class="btn" onclick="loadFailures()">{{ t('failure_apply_filters') }}</button>
+    </div>
+</div>
+
+<div id="status" class="status-loading" role="status">{{ t('failure_loading') }}</div>
+<div id="results"></div>
+
+<script>
+function esc(s) {
+    return (s || '').replace(/[&<>"']/g, c => ({'&':'&','<':'<','>':'>','"':'"',"'":'&#39;'}[c]));
+}
+
+function issueBadge(issues, retrievedHit) {
+    let html = '';
+    (issues || []).forEach(i => {
+        html += `<span class="badge bad" style="margin-right:4px">${esc(i)}</span>`;
+    });
+    if (retrievedHit === false) html += '<span class="badge warn">{{ t('failure_retrieval_miss') }}</span>';
+    if (!html) html = '<span class="badge ok">{{ t('failure_no_tags') }}</span>';
+    return html;
+}
+
+function loadFailures() {
+    const lang = document.getElementById('langFilter').value;
+    const mode = document.getElementById('modeFilter').value;
+    const statusEl = document.getElementById('status');
+    const resultsEl = document.getElementById('results');
+
+    statusEl.className = 'status-loading';
+    statusEl.style.display = '';
+    statusEl.textContent = '{{ t('failure_loading') }}';
+    resultsEl.innerHTML = '';
+
+    const params = new URLSearchParams();
+    if (lang) params.set('lang', lang);
+    if (mode) params.set('mode', mode);
+    params.set('limit', '100');
+
+    fetch('/api/failures?' + params.toString()).then(r => {
+        if (!r.ok) throw new Error('{{ t('failure_api_failed') }}: ' + r.status);
+        return r.json();
+    }).then(data => {
+        statusEl.style.display = 'none';
+        if (!data.failures.length) {
+            resultsEl.innerHTML = '<div class="card"><div class="empty-state">{{ t('failure_no_matches') }}</div></div>';
+            return;
+        }
+        const summary = document.createElement('div');
+        summary.className = 'card';
+        summary.innerHTML = `<strong>${data.failures.length}</strong> {{ t('failure_of') }} <strong>${data.total_matching}</strong> {{ t('failure_matching_failures') }} ({{ t('failure_sorted_by_lowest') }})`;
+        resultsEl.appendChild(summary);
+
+        data.failures.forEach(f => {
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.innerHTML = `
+                <div style="font-size:.72rem;color:var(--muted)">
+                    ${String(f.lang).toUpperCase()} · ${esc(f.mode)} · qid ${esc(String(f.qid))} ·
+                    correctness <strong>${f.correctness}/5</strong>${f.faithfulness !== null && f.faithfulness !== undefined ? ' · faithfulness ' + f.faithfulness + '/5' : ''}
+                </div>
+                <div style="margin-top:8px"><strong>{{ t('failure_question') }}:</strong> ${esc(f.question || '(not available)')}</div>
+                ${f.gloss_question ? `<div style="font-size:.75rem;color:var(--muted)">{{ t('failure_gloss') }}: ${esc(f.gloss_question)}</div>` : ''}
+                <div style="margin-top:6px"><strong>{{ t('failure_bot_answer') }}:</strong> ${esc(f.answer || '')}</div>
+                ${f.gloss_answer ? `<div style="font-size:.75rem;color:var(--muted)">{{ t('failure_gloss') }}: ${esc(f.gloss_answer)}</div>` : ''}
+                <div style="margin-top:8px">${issueBadge(f.issues, f.retrieved_hit)}</div>`;
+            resultsEl.appendChild(card);
+        });
+    }).catch(err => {
+        statusEl.className = 'status-error';
+        statusEl.style.display = '';
+        statusEl.textContent = '{{ t('failure_could_not_load') }}: ' + err.message;
+    });
+}
+
+document.getElementById('langFilter').addEventListener('change', loadFailures);
+document.getElementById('modeFilter').addEventListener('change', loadFailures);
+loadFailures();
+</script>
+{% endblock %}

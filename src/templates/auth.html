@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}{{ t('auth_sign_up') if form == 'signup' else t('auth_sign_in') }}{% endblock %}
+{% block content %}
+<section class="auth-card card">
+  <span class="eyebrow">BhashaCore</span><h1>{{ t('auth_sign_up') if form == 'signup' else t('auth_sign_in') }}</h1>
+  <p class="subtitle">{{ t('auth_password_hint') if form == 'signup' else t('auth_workspace') }}</p>
+  {% with messages = get_flashed_messages(with_categories=true) %}{% for category, message in messages %}<div class="notice {{ category }}">{{ message }}</div>{% endfor %}{% endwith %}
+  <form method="post" class="auth-form" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if form == 'signup' %}<label>{{ t('auth_full_name') }}<input name="name" required minlength="2" maxlength="100" autocomplete="name"></label>{% endif %}
+    <label>{{ t('auth_email') }}<input name="email" required type="email" autocomplete="email"></label>
+    <label>{{ t('auth_password') }}<div class="password-wrap"><input id="password" name="password" required type="password" minlength="12" autocomplete="{{ 'new-password' if form == 'signup' else 'current-password' }}"><button type="button" class="text-btn" onclick="togglePassword('password')">{{ t('auth_show') }}</button></div></label>
+    {% if form == 'signup' %}<label>{{ t('auth_confirm_password') }}<div class="password-wrap"><input id="confirm_password" name="confirm_password" required type="password" minlength="12" autocomplete="new-password"><button type="button" class="text-btn" onclick="togglePassword('confirm_password')">{{ t('auth_show') }}</button></div></label><label class="check"><input name="consent" type="checkbox" required> {{ t('auth_consent') }}</label>{% endif %}
+    <button class="btn" type="submit">{{ t('auth_sign_up') if form == 'signup' else t('auth_sign_in') }}</button>
+  </form>
+  <p class="hint">{% if form == 'signup' %}<a href="/signin">{{ t('auth_sign_in') }}</a>{% else %}<a href="/signup">{{ t('auth_sign_up') }}</a> · <a href="/forgot-password">{{ t('auth_forgot') }}</a>{% endif %}</p>
+</section>
+<script>function togglePassword(id){const input=document.getElementById(id);input.type=input.type==='password'?'text':'password';}</script>
+{% endblock %}
