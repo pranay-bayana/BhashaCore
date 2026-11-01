@@ -14,6 +14,9 @@
 - `.env` and common secret-file formats are Git-ignored, while `.env.example`
   remains tracked with placeholders. Alembic redacts database passwords from
   offline configuration state.
+- Supabase Transaction Pooler access is verified with TLS. psycopg
+  server-side prepared statements are disabled to avoid backend-session
+  affinity assumptions in transaction pooling.
 
 ## PARTIAL
 

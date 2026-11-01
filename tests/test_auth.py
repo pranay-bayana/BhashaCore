@@ -139,6 +139,7 @@ def test_production_configuration_requires_secret_and_redis():
     assert "DATABASE_URL must use PostgreSQL when APP_ENV=production" in source
     assert "TRUSTED_HOSTS is required when APP_ENV=production" in source
     assert "load_dotenv(ROOT / \".env\", override=False)" in source
+    assert '"prepare_threshold": None' in source
 
 
 def test_production_chat_apis_require_authentication(client):

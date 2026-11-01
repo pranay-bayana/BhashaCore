@@ -7,6 +7,10 @@ to a managed PostgreSQL database using the `postgresql+psycopg://` SQLAlchemy
 scheme. Do not use the SQLite fallback for deployed user data. Configure
 `NVIDIA_API_KEY` only in the server environment.
 
+For Supabase, use the Transaction Pooler endpoint on port `6543`. The
+application requires TLS and disables psycopg server-side prepared statements
+so requests remain safe when the pooler assigns different backend sessions.
+
 ## Database migration
 
 The initial migrations are already present in source control. On a new or

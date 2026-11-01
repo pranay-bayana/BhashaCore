@@ -14,10 +14,15 @@ requires `FLASK_SECRET_KEY`, `REDIS_URL`, `TRUSTED_HOSTS`, and
 
 ## Required environment values
 
-Use the Supabase Session Pooler URL with the `postgresql+psycopg://` scheme in
-`DATABASE_URL`. Keep the actual URL only in the hosting environment or the
-ignored `.env` file. Set `TRUSTED_HOSTS` to the public hostname or a
-comma-separated hostname list.
+Use the Supabase Transaction Pooler endpoint on port `6543` with the
+`postgresql+psycopg://` scheme in `DATABASE_URL`. Keep the actual URL only in
+the hosting environment or the ignored `.env` file. Set `TRUSTED_HOSTS` to the
+public hostname or a comma-separated hostname list.
+
+psycopg server-side prepared statements are disabled with
+`prepare_threshold=None`. This is required for transaction-pooler safety,
+because consecutive application requests can use different PostgreSQL backend
+sessions.
 
 ## Safe migration procedure
 
@@ -49,11 +54,14 @@ issue trackers, reports, or Git.
 
 ## Current verification status
 
-On 2026-11-01, the configured Session Pooler hostname resolved successfully,
-but its configured TCP port timed out before a TLS handshake. The connection
-therefore did not reach PostgreSQL authentication. No remote migration, schema
-inspection, or data mutation occurred.
+On 2026-11-01, the Transaction Pooler was verified through port `6543` using
+SQLAlchemy and psycopg with TLS enabled and server-side prepared statements
+disabled. `SELECT 1` passed, Alembic reported head `2636fcb607c4`, and both
+repository migrations were applied from an empty public schema.
 
-Check the Supabase project is active, confirm the Session Pooler hostname and
-port in the Supabase Connect panel, and allow outbound TCP access to that port
-from this Mac or deployment host. Then run the verification command above.
+Schema inspection verified `users`, `conversations`, `messages`,
+`password_reset_tokens`, and `alembic_version`; expected columns, unique email
+index, conversation ownership index, and cascading foreign keys are present.
+Isolated remote integration tests verified signup, login, history loading,
+rename, deletion, cross-user access denial, persistence after a fresh
+application process, new-chat persistence, and account deletion cascade.

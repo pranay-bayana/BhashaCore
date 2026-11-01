@@ -216,7 +216,14 @@ if _database_url and _database_url.startswith(("postgresql://", "postgresql+psyc
         "pool_size": 5,
         "max_overflow": 5,
         "pool_timeout": 30,
-        "connect_args": {"connect_timeout": 10, "sslmode": "require"},
+        # psycopg automatically prepares frequently-used statements by default.
+        # Transaction poolers may route consecutive requests to different backend
+        # sessions, so keep statements client-side for pooler compatibility.
+        "connect_args": {
+            "connect_timeout": 10,
+            "sslmode": "require",
+            "prepare_threshold": None,
+        },
     })
 app.config["RATELIMIT_STORAGE_URI"] = os.environ.get("REDIS_URL", "memory://")
 app.config["RATELIMIT_HEADERS_ENABLED"] = True
