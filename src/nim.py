@@ -113,6 +113,7 @@ class NimClient:
             await self._pace_launch()
             for attempt in range(MAX_RETRIES):
                 content, reasoning_chars, usage = [], 0, {}
+                completed = False
                 try:
                     async with self.client.stream(
                         "POST", url, json=payload,
@@ -141,6 +142,7 @@ class NimClient:
                                 continue
                             data = line[5:].strip()
                             if data == "[DONE]":
+                                completed = True
                                 break
                             try:
                                 obj = json.loads(data)
@@ -155,6 +157,15 @@ class NimClient:
                                 rc = delta.get("reasoning_content")
                                 if rc:
                                     reasoning_chars += len(rc)
+                    if not completed:
+                        # A clean TCP EOF is not an OpenAI-compatible stream
+                        # completion. Returning partial text as an answer would
+                        # misrepresent a provider interruption as success.
+                        last_err = "stream ended without completion marker"
+                        # The provider may already have performed inference
+                        # before a proxy terminates the stream. Retrying here
+                        # risks duplicate generated answers and duplicate cost.
+                        return {"content": None, "error": last_err, "status": 0}
                     result = {
                         "content": "".join(content).strip(),
                         "usage": usage,
@@ -164,9 +175,14 @@ class NimClient:
                     logger.info("nim_chat status=%s latency_ms=%d content_chars=%d", 200,
                                 (time.monotonic() - started) * 1000, len(result["content"]))
                     return result
-                except (httpx.TimeoutException, httpx.TransportError):
-                    last_err = "timeout/transport"
-                    await asyncio.sleep(min(2 ** attempt * 2, 30))
+                except httpx.TimeoutException:
+                    last_err = "timeout"
+                    # A timeout is ambiguous: do not submit the user's prompt
+                    # a second time when the provider may still be processing it.
+                    return {"content": None, "error": last_err, "status": 0}
+                except httpx.TransportError:
+                    last_err = "transport error"
+                    return {"content": None, "error": last_err, "status": 0}
             logger.warning("nim_chat status=%s latency_ms=%d error=%s", 0,
                            (time.monotonic() - started) * 1000, last_err)
             return {"content": None, "error": f"exhausted retries (last: {last_err})", "status": 0}
