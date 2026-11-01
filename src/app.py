@@ -42,6 +42,7 @@ from src.config import (  # noqa: E402
     JUDGE_DIR,
     LANGS,
     LLM_CALL_TIMEOUT,
+    MAX_OUT_TOKENS,
     MODES,
     PRIMARY_GENERATOR,
     PROC_DIR,
@@ -278,6 +279,9 @@ def _llm_configured() -> bool:
     and permanently disable live generation for the life of the process.
     Never exposes the key value.
     """
+    provider = os.environ.get("GENERATION_PROVIDER", "nvidia").lower()
+    if provider == "sarvam":
+        return bool(os.environ.get("SARVAM_API_KEY"))
     try:
         from src.nim import get_api_key
 
@@ -287,9 +291,38 @@ def _llm_configured() -> bool:
         return False
 
 
+def _active_generator_model() -> str:
+    """Return the configured live provider model without probing inference."""
+    if os.environ.get("GENERATION_PROVIDER", "nvidia").lower() == "sarvam":
+        return os.environ.get("SARVAM_MODEL", "sarvam-105b-conversations")
+    return os.environ.get("NVIDIA_MODEL", PRIMARY_GENERATOR)
+
+
+def _live_provider_answer(messages: list[dict[str, str]]) -> str:
+    """Run one verified provider request while preserving existing route contracts."""
+    from src.generation_provider import GenerationRequest, create_generation_provider
+
+    provider = create_generation_provider()
+    try:
+        result = _run_async(provider.generate(GenerationRequest(
+            messages=messages,
+            model=_active_generator_model(),
+            max_tokens=MAX_OUT_TOKENS,
+            temperature=0,
+        )), timeout=LLM_CALL_TIMEOUT)
+    finally:
+        try:
+            _run_async(provider.aclose())
+        except Exception:
+            pass
+    if not result.completed or not result.content:
+        raise RuntimeError(result.error_code or "empty LLM response")
+    return result.content
+
+
 HAS_LLM = _llm_configured()
 GENERATOR_LABEL = (
-    PRIMARY_GENERATOR if HAS_LLM else "dataset-eval-gold (live generation unavailable)"
+    _active_generator_model() if HAS_LLM else "dataset-eval-gold (live generation unavailable)"
 )
 
 # ---------------------------------------------------------------------------
@@ -481,7 +514,6 @@ def _llm_answer(question: str, passages: list, answer_lang: str, answer_script: 
     Uses a bounded timeout so the app never hangs on a slow provider.
     """
     from src.generate import GROUNDING_CTX
-    from src.nim import NimClient
 
     meta = LANGS[answer_lang]
     if answer_lang == "en" or answer_script == "latin":
@@ -499,17 +531,7 @@ def _llm_answer(question: str, passages: list, answer_lang: str, answer_script: 
         {"role": "system", "content": system},
         {"role": "user", "content": f"Context passages:\n{ctx}\n\nQuestion: {question}"},
     ]
-    client = NimClient(PRIMARY_GENERATOR)
-    try:
-        resp = _run_async(client.chat(messages), timeout=LLM_CALL_TIMEOUT)
-    finally:
-        try:
-            _run_async(client.aclose())
-        except Exception:
-            pass
-    if not resp.get("content"):
-        raise RuntimeError(resp.get("error") or "empty LLM response")
-    return resp["content"]
+    return _live_provider_answer(messages)
 
 
 def answer_question(
@@ -632,7 +654,6 @@ def answer_question(
             # General knowledge question: answer from the model's own
             # knowledge, not corpus-grounded. No citations attached.
             from src.generate import GROUNDING_CTX
-            from src.nim import NimClient
 
             meta = LANGS[answer_lang_eff]
             if answer_lang_eff == "en" or answer_script == "latin":
@@ -650,12 +671,8 @@ def answer_question(
                 {"role": "system", "content": system},
                 {"role": "user", "content": f"Question: {question}"},
             ]
-            client = NimClient(PRIMARY_GENERATOR)
             try:
-                resp = _run_async(client.chat(messages), timeout=LLM_CALL_TIMEOUT)
-                if not resp.get("content"):
-                    raise RuntimeError(resp.get("error") or "empty LLM response")
-                answer = resp["content"]
+                answer = _live_provider_answer(messages)
                 model = f"{GENERATOR_LABEL} (model-only, no corpus grounding)"
                 status = "answered"
                 # Model-only answers: no citations are used or relevant.
@@ -675,11 +692,6 @@ def answer_question(
                 )
                 status = "provider_unavailable"
                 model = f"{GENERATOR_LABEL} (provider error: {str(exc)[:80]})"
-            finally:
-                try:
-                    _run_async(client.aclose())
-                except Exception:
-                    pass
         else:
             answer = INSUFFICIENT_NOTICE
             status = "insufficient_evidence"
@@ -1062,12 +1074,22 @@ def api_new_chat():
     sid = str(uuid.uuid4()) if supplied_sid is None else supplied_sid
     if not _valid_session_id(sid):
         return jsonify({"error": "invalid session_id"}), 400
+    user = current_user()
+    if user:
+        conversation = get_owned_conversation(user, sid)
+        if conversation is None:
+            # Never claim another account's ID: retain the same ownership
+            # protection as /api/chat before creating a fresh conversation.
+            if db.session.get(Conversation, sid) is not None:
+                return jsonify({"error": "conversation not found"}), 404
+            db.session.add(Conversation(id=sid, user_id=user.id, title="New chat"))
+            db.session.commit()
     with _chat_lock:
         _chat_states[sid] = {
             "lang": "en",
             "messages": [{"role": "system", "content": "You are BhashaCore, a helpful assistant."}],
         }
-        if current_user() is None:
+        if user is None:
             _save_chat(sid)
     with _stop_lock:
         ev = STOP_EVENTS.pop(sid, None)

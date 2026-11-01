@@ -5,6 +5,8 @@ import pytest
 from src.generation_provider import (
     GenerationRequest,
     NvidiaGenerationProvider,
+    SarvamGenerationProvider,
+    create_generation_provider,
 )
 
 
@@ -63,3 +65,54 @@ def test_nvidia_adapter_rejects_unverified_nonstreaming_path():
         asyncio.run(provider.generate(GenerationRequest(
             messages=[{"role": "user", "content": "hello"}], model="model-a", max_tokens=8, streaming=False,
         )))
+
+
+class FakeStreamResponse:
+    def __init__(self, status_code, lines):
+        self.status_code = status_code
+        self._lines = lines
+
+    async def __aenter__(self): return self
+    async def __aexit__(self, *args): return False
+
+    async def aiter_lines(self):
+        for line in self._lines:
+            yield line
+
+
+class FakeSarvamClient:
+    def __init__(self, response): self.response, self.closed = response, False
+    def stream(self, *args, **kwargs): return self.response
+    async def aclose(self): self.closed = True
+
+
+def test_sarvam_adapter_requires_completed_sse_content():
+    response = FakeStreamResponse(200, [
+        'data: {"choices":[{"delta":{"content":"OK"}}]}',
+        'data: [DONE]',
+    ])
+    client = FakeSarvamClient(response)
+    provider = SarvamGenerationProvider('sarvam-test', client=client)
+    result = asyncio.run(provider.generate(GenerationRequest(
+        messages=[{"role": "user", "content": "hello"}], model='sarvam-test', max_tokens=8,
+    )))
+    assert result.completed is True
+    assert result.content == 'OK'
+    asyncio.run(provider.aclose())
+    assert client.closed is True
+
+
+def test_sarvam_adapter_rejects_incomplete_stream():
+    provider = SarvamGenerationProvider('sarvam-test', client=FakeSarvamClient(
+        FakeStreamResponse(200, ['data: {"choices":[{"delta":{"content":"partial"}}]}'])
+    ))
+    result = asyncio.run(provider.generate(GenerationRequest(
+        messages=[{"role": "user", "content": "hello"}], model='sarvam-test', max_tokens=8,
+    )))
+    assert result.completed is False
+    assert result.error_code == 'provider_incomplete_stream'
+
+
+def test_provider_factory_rejects_unknown_provider():
+    with pytest.raises(ValueError, match='unsupported generation provider'):
+        create_generation_provider('unknown')
