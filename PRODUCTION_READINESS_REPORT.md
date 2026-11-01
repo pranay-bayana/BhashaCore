@@ -15,7 +15,7 @@
 
 ## BLOCKED
 
-- Supabase connectivity, migration state, schema, and persistence verification: the post-rotation attempt reached DNS resolution but the configured host is the literal placeholder `YOUR_POOLER_HOST`. It cannot resolve, so authentication, `SELECT 1`, TLS verification, migration inspection, and all remote data tests are blocked. No remote mutation occurred. Replace only that placeholder with the Session Pooler hostname, then run the safe checks in `SUPABASE_SETUP.md`.
+- Supabase connectivity, migration state, schema, and persistence verification: the configured Session Pooler hostname resolves, but TCP connectivity to the configured port times out before TLS or PostgreSQL authentication. Therefore `SELECT 1`, Alembic current/upgrade, schema verification, and remote persistence tests are blocked. No remote mutation occurred. Confirm the active project, Session Pooler endpoint and port, and outbound network access before retrying the safe checks in `SUPABASE_SETUP.md`.
 - Redis shared-rate-limit verification: `REDIS_URL` is absent. Next action: provision Redis, set `REDIS_URL`, and run Gunicorn multi-worker rate-limit tests.
 - NVIDIA live generation: model discovery completed in 169 ms and confirmed the configured model, but a capped streaming generation request timed out after 15 seconds. No generation success is claimed.
 - Real transactional email delivery: `EMAIL_API_KEY`, `EMAIL_FROM`, and `APP_BASE_URL` are absent. Next action: configure Resend variables and send a controlled reset email.

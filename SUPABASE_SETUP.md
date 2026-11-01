@@ -49,9 +49,11 @@ issue trackers, reports, or Git.
 
 ## Current verification status
 
-On 2026-11-01, remote verification stopped before authentication because the
-ignored `DATABASE_URL` still contained the literal placeholder host
-`YOUR_POOLER_HOST`, which DNS cannot resolve. No remote migration, schema
-inspection, or data mutation occurred. Replace that placeholder with the exact
-Supabase Session Pooler hostname from the Supabase Connect panel while keeping
-the rotated password URL out of Git. Then run the verification command above.
+On 2026-11-01, the configured Session Pooler hostname resolved successfully,
+but its configured TCP port timed out before a TLS handshake. The connection
+therefore did not reach PostgreSQL authentication. No remote migration, schema
+inspection, or data mutation occurred.
+
+Check the Supabase project is active, confirm the Session Pooler hostname and
+port in the Supabase Connect panel, and allow outbound TCP access to that port
+from this Mac or deployment host. Then run the verification command above.
