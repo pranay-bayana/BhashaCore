@@ -120,7 +120,9 @@ def test_used_citations_support_contract_all_languages(client, lang):
     answer (>= 80% of answer tokens) or is the gold passage of the matched
     evaluation question."""
     examples = app_mod.grounded_examples(1)[lang][0]
-    _, done = _chat(client, lang, examples["question"], session=f"correctness-{lang}")
+    # Citation semantics are deterministic corpus logic.  Evaluation mode
+    # keeps this regression independent of an external provider's availability.
+    _, done = _chat(client, lang, examples["question"], session=f"correctness-{lang}", eval_mode=True)
     assert done["status"] == "answered"
     evals = {e["question"]: e for e in load_jsonl(proc_path(f"eval_{lang}"))}
     gold_pid = evals[examples["question"]]["gold_pid"]

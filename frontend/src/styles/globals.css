@@ -1,0 +1,184 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* LIGHT THEME (Warm, refined off-white with crisp dark typography & emerald accents) */
+  --bg-base: #F8FAF9;
+  --bg-deep: #EFF3F1;
+  --bg-elevated: #E5ECE8;
+  --glass-surface: rgba(255, 255, 255, 0.82);
+  --glass-elevated: rgba(255, 255, 255, 0.94);
+  --glass-subtle: rgba(255, 255, 255, 0.65);
+  --glass-border: rgba(0, 0, 0, 0.10);
+  --glass-border-subtle: rgba(0, 0, 0, 0.06);
+  --accent-lime: #15803D;
+  --accent-lime-surface: rgba(21, 128, 61, 0.10);
+  --accent-emerald: #0D9488;
+  --accent-emerald-surface: rgba(13, 148, 136, 0.10);
+  --text-primary: #121915;
+  --text-secondary: #48544E;
+  --text-muted: #728078;
+  --glow-beam: rgba(21, 128, 61, 0.08);
+  --glass-specular: rgba(255, 255, 255, 0.95);
+  --shadow-base: rgba(0, 0, 0, 0.06);
+}
+
+html.dark {
+  /* DARK THEME (Approved obsidian & neon lime glassmorphism) */
+  --bg-base: #060907;
+  --bg-deep: #0A100D;
+  --bg-elevated: #111814;
+  --glass-surface: rgba(16, 24, 19, 0.65);
+  --glass-elevated: rgba(20, 30, 24, 0.80);
+  --glass-subtle: rgba(255, 255, 255, 0.05);
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --glass-border-subtle: rgba(255, 255, 255, 0.07);
+  --accent-lime: #B7FF72;
+  --accent-lime-surface: rgba(183, 255, 114, 0.14);
+  --accent-emerald: #36D69A;
+  --accent-emerald-surface: rgba(54, 214, 154, 0.14);
+  --text-primary: #F7FAF7;
+  --text-secondary: #A1AAA4;
+  --text-muted: #717D75;
+  --glow-beam: rgba(183, 255, 114, 0.16);
+  --glass-specular: rgba(255, 255, 255, 0.18);
+  --shadow-base: rgba(0, 0, 0, 0.55);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--glass-border);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Base Glassmorphic Surface System */
+@layer components {
+  /* Tier 1: Base Glass Surface (Nav, Cards, Composer) */
+  .glass-panel {
+    background: var(--glass-surface);
+    backdrop-filter: blur(24px) saturate(160%);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
+    border: 1px solid var(--glass-border);
+    box-shadow: 0 8px 32px -4px var(--shadow-base), inset 0 1px 1.5px 0 var(--glass-specular);
+  }
+
+  /* Tier 2: Elevated Glass (Dropdowns, Active Pills, Modals) */
+  .glass-elevated {
+    background: var(--glass-elevated);
+    backdrop-filter: blur(28px) saturate(170%);
+    -webkit-backdrop-filter: blur(28px) saturate(170%);
+    border: 1px solid var(--glass-border);
+    box-shadow: 0 16px 48px -8px var(--shadow-base), inset 0 1px 2px 0 var(--glass-specular);
+  }
+
+  /* Tier 3: Subtle Sub-Surface (Inputs, Inactive Pills, Citations) */
+  .glass-subtle {
+    background: var(--glass-subtle);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--glass-border-subtle);
+  }
+
+  /* Interactive Glass Card with smooth elevation and subtle upward movement */
+  .interactive-glass-card {
+    background: var(--glass-surface);
+    backdrop-filter: blur(24px) saturate(160%);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
+    border: 1px solid var(--glass-border-subtle);
+    box-shadow: 0 4px 20px -2px var(--shadow-base), inset 0 1px 1px 0 var(--glass-specular);
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+                border-color 0.25s ease,
+                box-shadow 0.25s ease,
+                background-color 0.25s ease;
+    cursor: pointer;
+  }
+  .interactive-glass-card:hover {
+    transform: translateY(-4px);
+    border-color: rgba(183, 255, 114, 0.45);
+    box-shadow: 0 16px 36px -6px var(--shadow-base),
+                0 0 24px -2px rgba(183, 255, 114, 0.18),
+                inset 0 1px 1.5px 0 var(--glass-specular);
+  }
+  .interactive-glass-card:active {
+    transform: translateY(-1px) scale(0.99);
+  }
+  .interactive-glass-card:focus-visible {
+    outline: 2px solid var(--accent-lime);
+    outline-offset: 2px;
+  }
+
+  /* Glass Buttons */
+  .btn-lime-glass {
+    background: linear-gradient(180deg, var(--accent-lime) 0%, var(--accent-emerald) 100%);
+    color: #050706;
+    font-weight: 600;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    box-shadow: 0 4px 18px -2px var(--glow-beam), inset 0 1px 1.5px rgba(255, 255, 255, 0.6);
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  html:not(.dark) .btn-lime-glass {
+    color: #FFFFFF;
+    background: linear-gradient(180deg, #16A34A 0%, #059669 100%);
+    border-color: rgba(0, 0, 0, 0.08);
+    box-shadow: 0 4px 14px -2px rgba(22, 163, 74, 0.25), inset 0 1px 1px rgba(255, 255, 255, 0.4);
+  }
+  .btn-lime-glass:hover:not(:disabled) {
+    filter: brightness(1.08);
+    transform: translateY(-1px);
+  }
+  .btn-lime-glass:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+
+  .btn-ghost-glass {
+    background: var(--glass-subtle);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    box-shadow: 0 4px 16px -2px var(--shadow-base), inset 0 1px 1.2px var(--glass-specular);
+    color: var(--text-primary);
+    transition: all 0.2s ease;
+  }
+  .btn-ghost-glass:hover:not(:disabled) {
+    background: var(--glass-elevated);
+    border-color: var(--glass-border);
+    transform: translateY(-1px);
+  }
+  .btn-ghost-glass:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+}
+
+/* Fallback for browsers without backdrop-filter */
+@supports not (backdrop-filter: blur(10px)) {
+  .glass-panel {
+    background: var(--bg-deep);
+  }
+  .glass-elevated {
+    background: var(--bg-elevated);
+  }
+  .glass-subtle {
+    background: var(--bg-base);
+  }
+}
+
+/* Respect reduced-motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

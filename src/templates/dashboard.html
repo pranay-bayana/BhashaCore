@@ -2,45 +2,240 @@
 {% block title %}{{ t('nav_dashboard') }}{% endblock %}
 {% block nav_dashboard %}aria-current="page"{% endblock %}
 
-{% block content %}
-<h1>{{ t('nav_dashboard') }}</h1>
-<p class="subtitle">{{ t('dashboard_live_view', generator=generator) }}</p>
+{% block head %}
+<style>
+  .dashboard-header {
+    margin-bottom: 2rem;
+  }
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 1.5rem;
+  }
+  .stat-card {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
+    backdrop-filter: blur(24px) saturate(160%);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
+    border: 1px solid rgba(255, 255, 255, 0.11);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem 1.4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.20), var(--shadow-sm);
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+  .stat-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(255, 255, 255, 0.22);
+    box-shadow: inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.28), var(--shadow-md), 0 0 20px rgba(183, 255, 114, 0.1);
+  }
+  .stat-card .stat-val {
+    font-size: 2rem;
+    font-weight: 800;
+    line-height: 1.1;
+    color: var(--text-primary);
+  }
+  .stat-card .stat-label {
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+  .stat-card.danger .stat-val {
+    color: var(--color-danger);
+  }
+  .stat-card.success .stat-val {
+    color: var(--color-success);
+  }
+  .stat-card.primary .stat-val {
+    color: var(--accent-cyan);
+  }
+  .generator-banner {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.02) 100%);
+    backdrop-filter: blur(20px) saturate(150%);
+    -webkit-backdrop-filter: blur(20px) saturate(150%);
+    border: 1px solid rgba(255, 255, 255, 0.11);
+    box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.15);
+    border-radius: var(--radius-md);
+    padding: 0.85rem 1.2rem;
+    font-size: 0.84rem;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  @media (max-width: 860px) {
+    .stats-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+  @media (max-width: 480px) {
+    .stats-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+  .research-hub-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-subtle);
+    overflow-x: auto;
+  }
+  .research-tab-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: var(--radius-full);
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.18);
+    text-decoration: none;
+    transition: all var(--transition-fast);
+    white-space: nowrap;
+  }
+  .research-tab-pill:hover {
+    color: var(--text-primary);
+    border-color: rgba(255, 255, 255, 0.24);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.04) 100%);
+    transform: translateY(-1px);
+  }
+  .research-tab-pill.active {
+    background: linear-gradient(135deg, rgba(183, 255, 114, 0.18) 0%, rgba(183, 255, 114, 0.06) 100%);
+    border-color: rgba(183, 255, 114, 0.45);
+    color: #B7FF72;
+    box-shadow: inset 0 1px 1.5px rgba(255, 255, 255, 0.35), 0 0 16px rgba(183, 255, 114, 0.22);
+  }
+</style>
+{% endblock %}
 
-<div id="status" class="status-loading" role="status">{{ t('dashboard_loading') }}</div>
-<div id="content" style="display:none">
-    <div class="card" id="countsCard"></div>
-    <div class="card">
-        <h2 style="font-size:1rem;margin-bottom:10px">{{ t('dashboard_answer_quality') }}</h2>
-        <p style="font-size:.8rem;color:var(--muted);margin-bottom:10px">
-            {{ t('dashboard_answer_quality_desc') }}
-        </p>
-        <div style="overflow-x:auto">
-            <table id="qualityTable">
-                <thead><tr><th>{{ t('dashboard_language') }}</th><th>{{ t('dashboard_closed_book') }}</th><th>{{ t('dashboard_gold_context') }}</th><th>{{ t('dashboard_rag') }}</th><th>{{ t('dashboard_rag_translit') }}</th></tr></thead>
-                <tbody></tbody>
-            </table>
-        </div>
-    </div>
-    <div class="card">
-        <h2 style="font-size:1rem;margin-bottom:10px">{{ t('dashboard_retrieval_quality') }}</h2>
-        <div style="overflow-x:auto">
-            <table id="retrievalTable">
-                <thead><tr><th>{{ t('dashboard_language') }}</th><th>{{ t('dashboard_recall_native') }}</th><th>{{ t('dashboard_mrr_native') }}</th><th>{{ t('dashboard_recall_romanized') }}</th><th>{{ t('dashboard_mrr_romanized') }}</th></tr></thead>
-                <tbody></tbody>
-            </table>
-        </div>
-    </div>
+{% block content %}
+<div class="research-content-container">
+<div class="research-hub-tabs" role="tablist" aria-label="Research Navigation">
+  <a href="/dashboard" class="research-tab-pill active" role="tab" aria-selected="true">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
+    <span>{{ t('nav_dashboard') }}</span>
+  </a>
+  <a href="/language-comparison" class="research-tab-pill" role="tab" aria-selected="false">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+    <span>{{ t('nav_comparison') }}</span>
+  </a>
+  <a href="/failure-analysis" class="research-tab-pill" role="tab" aria-selected="false">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+    <span>{{ t('nav_failures') }}</span>
+  </a>
 </div>
 
+<div class="dashboard-header">
+  <span class="eyebrow" data-i18n="dashboard_eyebrow">{{ t('dashboard_eyebrow') }}</span>
+  <h1 data-i18n="nav_dashboard">{{ t('nav_dashboard') }}</h1>
+  <p class="subtitle">{{ t('dashboard_live_view', generator=generator) }}</p>
+  <div class="notice">
+    <strong data-i18n="dashboard_criteria_title">{{ t('dashboard_criteria_title') }}</strong> <span data-i18n="dashboard_criteria_desc">{{ t('dashboard_criteria_desc') }}</span>
+  </div>
+</div>
+
+<div id="status" class="status-loading" role="status">
+  <div style="font-weight:600; margin-bottom:6px;" data-i18n="dashboard_loading">{{ t('dashboard_loading') }}</div>
+  <div style="font-size:0.84rem; color:var(--text-muted);" data-i18n="dashboard_fetching">{{ t('dashboard_fetching') }}</div>
+</div>
+
+<div id="content" style="display:none;">
+  <!-- KPI Metrics Grid -->
+  <div class="stats-grid" id="countsCard"></div>
+
+  <!-- Generator Metadata Bar -->
+  <div class="generator-banner" id="generatorBanner">
+    <div style="display:flex; align-items:center; gap:8px;">
+      <span class="badge badge-ok" data-i18n="dashboard_live_run">{{ t('dashboard_live_run') }}</span>
+      <span id="generator-info" style="font-family:var(--font-mono); font-size:0.82rem;"></span>
+    </div>
+    <div>
+      <span class="badge badge-muted" data-i18n="dashboard_dataset_tag">{{ t('dashboard_dataset_tag') }}</span>
+    </div>
+  </div>
+
+  <!-- Answer Quality Matrix -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <h2 class="card-title" data-i18n="dashboard_answer_quality">{{ t('dashboard_answer_quality') }}</h2>
+        <p style="font-size:0.82rem; color:var(--text-secondary); margin-top:2px;" data-i18n="dashboard_answer_quality_desc">
+          {{ t('dashboard_answer_quality_desc') }}
+        </p>
+      </div>
+      <span class="badge badge-indigo" data-i18n="dashboard_scale_badge">{{ t('dashboard_scale_badge') }}</span>
+    </div>
+    <div class="table-wrapper">
+      <table id="qualityTable">
+        <thead>
+          <tr>
+            <th data-i18n="dashboard_language">{{ t('dashboard_language') }}</th>
+            <th data-i18n="dashboard_closed_book">{{ t('dashboard_closed_book') }}</th>
+            <th data-i18n="dashboard_gold_context">{{ t('dashboard_gold_context') }}</th>
+            <th data-i18n="dashboard_rag">{{ t('dashboard_rag') }}</th>
+            <th data-i18n="dashboard_rag_translit">{{ t('dashboard_rag_translit') }}</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Retrieval Quality Matrix -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <h2 class="card-title" data-i18n="dashboard_retrieval_quality">{{ t('dashboard_retrieval_quality') }}</h2>
+        <p style="font-size:0.82rem; color:var(--text-secondary); margin-top:2px;" data-i18n="dashboard_retrieval_quality_desc">
+          {{ t('dashboard_retrieval_quality_desc') }}
+        </p>
+      </div>
+      <span class="badge badge-cyan" data-i18n="dashboard_bm25_badge">{{ t('dashboard_bm25_badge') }}</span>
+    </div>
+    <div class="table-wrapper">
+      <table id="retrievalTable">
+        <thead>
+          <tr>
+            <th data-i18n="dashboard_language">{{ t('dashboard_language') }}</th>
+            <th data-i18n="dashboard_recall_native">{{ t('dashboard_recall_native') }}</th>
+            <th data-i18n="dashboard_mrr_native">{{ t('dashboard_mrr_native') }}</th>
+            <th data-i18n="dashboard_recall_romanized">{{ t('dashboard_recall_romanized') }}</th>
+            <th data-i18n="dashboard_mrr_romanized">{{ t('dashboard_mrr_romanized') }}</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
 <script>
 const LANG_NAMES = {{ get_available_languages() | tojson }};
 const MODE_ORDER = ['closed_book', 'gold_context', 'rag', 'rag_translit'];
 
 function cell(v, n) {
     if (v === null || v === undefined) return '<td>—</td>';
-    let cls = 'badge ok';
-    if (v < 2) cls = 'badge bad'; else if (v < 4) cls = 'badge warn';
-    return `<td><span class="${cls}">${v.toFixed(2)}</span> <span style="color:var(--muted);font-size:.72rem">(n=${n})</span></td>`;
+    let cls = 'badge badge-ok';
+    if (v <= 3) cls = 'badge badge-bad';
+    else if (v < 4) cls = 'badge badge-warn';
+    return `<td><span class="${cls}">${v.toFixed(2)}</span> <span style="color:var(--text-muted);font-size:0.75rem">(n=${n})</span></td>`;
 }
 
 fetch('/api/dashboard').then(r => {
@@ -52,19 +247,28 @@ fetch('/api/dashboard').then(r => {
 
     const c = data.counts;
     document.getElementById('countsCard').innerHTML = `
-        <div style="display:flex;gap:26px;flex-wrap:wrap;text-align:center">
-            <div><div style="font-size:1.6rem;font-weight:700">${c.judged}</div><div style="font-size:.75rem;color:var(--muted)">{{ t('dashboard_judged_answers') }}</div></div>
-            <div><div style="font-size:1.6rem;font-weight:700;color:var(--bad)">${c.failures}</div><div style="font-size:.75rem;color:var(--muted)">{{ t('dashboard_failures') }}</div></div>
-            <div><div style="font-size:1.6rem;font-weight:700">${c.languages}</div><div style="font-size:.75rem;color:var(--muted)">{{ t('dashboard_languages') }}</div></div>
-            <div><div style="font-size:1.6rem;font-weight:700">${c.retrieval_rows}</div><div style="font-size:.75rem;color:var(--muted)">{{ t('dashboard_retrieval_evaluations') }}</div></div>
+        <div class="stat-card primary">
+            <div class="stat-val">${c.judged}</div>
+            <div class="stat-label">{{ t('dashboard_judged_answers') }}</div>
         </div>
-        <p style="font-size:.78rem;color:var(--muted);margin-top:12px" id="generator-info"></p>`;
+        <div class="stat-card danger">
+            <div class="stat-val">${c.failures}</div>
+            <div class="stat-label">{{ t('dashboard_failures') }} (&le; 3)</div>
+        </div>
+        <div class="stat-card success">
+            <div class="stat-val">${c.languages}</div>
+            <div class="stat-label">{{ t('dashboard_languages') }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-val">${c.retrieval_rows}</div>
+            <div class="stat-label">{{ t('dashboard_retrieval_evaluations') }}</div>
+        </div>`;
 
     const tbody = document.querySelector('#qualityTable tbody');
     tbody.innerHTML = '';
     for (const [lang, modes] of Object.entries(data.by_language)) {
         const row = document.createElement('tr');
-        let html = `<td><strong>${(LANG_NAMES[lang] || lang)}</strong></td>`;
+        let html = `<td><strong>${(LANG_NAMES[lang] || lang)}</strong> (${lang.toUpperCase()})</td>`;
         for (const mode of MODE_ORDER) {
             const m = modes[mode];
             html += m ? cell(m.correctness, m.n) : '<td>—</td>';
@@ -74,10 +278,7 @@ fetch('/api/dashboard').then(r => {
     }
 
     const genInfo = document.getElementById('generator-info');
-    genInfo.textContent = `{{ t('dashboard_generator', generator='GEN', judge='JUDGE', generator_active='ACTIVE') }}`
-        .replace('GEN', data.generator)
-        .replace('JUDGE', data.judge_model || '—')
-        .replace('ACTIVE', data.generator_active);
+    genInfo.textContent = `Generator: ${data.generator} | Judge: ${data.judge_model || '—'}`;
 
     const rt = document.querySelector('#retrievalTable tbody');
     rt.innerHTML = '';
@@ -87,14 +288,14 @@ fetch('/api/dashboard').then(r => {
         const native = modes.rag || {}, roman = modes.rag_translit || {};
         const rr = document.createElement('tr');
         rr.innerHTML = `
-            <td><strong>${(LANG_NAMES[lang] || lang)}</strong></td>
+            <td><strong>${(LANG_NAMES[lang] || lang)}</strong> (${lang.toUpperCase()})</td>
             <td>${native['recall@5'] !== undefined ? (+native['recall@5']).toFixed(2) : '—'}</td>
             <td>${native['mrr@10'] !== undefined ? (+native['mrr@10']).toFixed(2) : '—'}</td>
             <td>${roman['recall@5'] !== undefined ? (+roman['recall@5']).toFixed(2) : '—'}</td>
             <td>${roman['mrr@10'] !== undefined ? (+roman['mrr@10']).toFixed(2) : '—'}</td>`;
         rt.appendChild(rr);
     }
-    if (rt.children.length === 0) rt.innerHTML = '<tr><td colspan="5">{{ t('dashboard_no_retrieval') }}</td></tr>';
+    if (rt.children.length === 0) rt.innerHTML = '<tr><td colspan="5" style="text-align:center;">{{ t('dashboard_no_retrieval') }}</td></tr>';
 }).catch(err => {
     document.getElementById('status').className = 'status-error';
     document.getElementById('status').textContent = '{{ t('dashboard_could_not_load') }}: ' + err.message;

@@ -1,4 +1,7 @@
 .venv/
+node_modules/
+frontend/node_modules/
+frontend/dist/
 .env
 .env.*
 !.env.example
@@ -6,6 +9,7 @@
 *.key
 credentials*.json
 secrets*.json
+cookies.txt
 __pycache__/
 *.pyc
 .DS_Store
@@ -17,7 +21,14 @@ results/*.jsonl
 *.log
 chat_history/
 .pytest_cache/
+tests/screenshots/
+coverage/
+htmlcov/
+*.coverage
+*.tmp
+*.bak
 instance/*.sqlite3
 audit_*/**/*.sqlite3
 .playwright-mcp/
 .swarm/
+.opencode/

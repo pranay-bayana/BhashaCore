@@ -10,10 +10,14 @@ from __future__ import annotations
 import time
 import json
 import os
+import logging
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Protocol
 
 import httpx
+
+
+logger = logging.getLogger(__name__)
 
 
 SARVAM_DEFAULT_BASE_URL = "https://api.sarvam.ai/v1"
@@ -129,6 +133,11 @@ class SarvamGenerationProvider:
         timeout: httpx.Timeout | None = None,
     ):
         self.model = model or os.environ.get("SARVAM_MODEL", SARVAM_DEFAULT_MODEL)
+        # A TLS connection can occasionally be dropped by a local network
+        # intermediary before any HTTP request reaches Sarvam.  One fresh
+        # connection is safe to attempt; no timeout, response, or SSE failure
+        # is ever retried because those requests may already have executed.
+        self._connect_retry_attempted = False
         if client is None:
             client = httpx.AsyncClient(
                 base_url=(base_url or os.environ.get("SARVAM_BASE_URL", SARVAM_DEFAULT_BASE_URL)).rstrip("/"),
@@ -190,10 +199,16 @@ class SarvamGenerationProvider:
                         reasoning = delta.get("reasoning_content")
                         if reasoning:
                             reasoning_chars += len(reasoning)
-        except httpx.TimeoutException:
+        except httpx.TimeoutException as exc:
+            logger.warning("Sarvam request timed out (%s) after %dms", type(exc).__name__, round((time.monotonic() - started) * 1000))
             return GenerationResult(None, False, self.provider_name, self.model,
                                     round((time.monotonic() - started) * 1000), status, "provider_timeout")
-        except httpx.TransportError:
+        except httpx.TransportError as exc:
+            logger.warning("Sarvam transport failure (%s): %s", type(exc).__name__, str(exc)[:160])
+            if isinstance(exc, httpx.ConnectError) and not self._connect_retry_attempted:
+                self._connect_retry_attempted = True
+                logger.info("Retrying one Sarvam request after connection setup failure")
+                return await self.generate(request)
             return GenerationResult(None, False, self.provider_name, self.model,
                                     round((time.monotonic() - started) * 1000), status, "provider_transport_error")
         answer = "".join(content).strip()

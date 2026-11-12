@@ -14,6 +14,12 @@
 - One-time, hashed password-reset tokens with one-hour expiry and account-enumeration-safe request messaging.
 - Password-reset delivery adapter supports Resend and was tested with a deterministic HTTP mock; real delivery requires configured provider credentials.
 - Production startup rejects missing secrets, Redis, PostgreSQL URLs, trusted hosts, or a secure-cookie setting; it also disables anonymous chat.
+- Guest trials use a signed HTTP-only session cookie plus a server-side,
+  expiry-bound database record. A row-lock reservation prevents a fourth
+  response from being issued through concurrent tabs or Gunicorn workers.
+- Guest conversations are isolated from authenticated tables until explicit
+  sign-in/sign-up migration. Unauthorized rename and delete requests return
+  404 and leave the owner’s conversation unchanged.
 
 ## Required before public launch
 

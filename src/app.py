@@ -13,21 +13,24 @@ Generation source (honest, never fabricated):
 """
 
 import csv
+import hashlib
 import json
 import os
 import re
 import sys
 import time
 import uuid
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 from pathlib import Path
 from threading import Event, Lock
 
-from flask import Flask, Response, jsonify, render_template, request, g, session, flash, redirect, url_for
+from flask import Flask, Response, jsonify, render_template, request, g, session, flash, redirect, url_for, send_from_directory, current_app
 from flask_wtf.csrf import CSRFError, CSRFProtect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from dotenv import load_dotenv
+from sqlalchemy.exc import SQLAlchemyError
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -61,13 +64,18 @@ from src.langkit import (  # noqa: E402
 )
 from src.retrieval import PoolIndex, load_jsonl  # noqa: E402
 from src.translations import (  # noqa: E402
+    get_all_translations,
     get_available_languages,
     get_language_name,
+    get_translations,
     resolve_lang,
     t as _t,
 )
-from src.auth import (Conversation, Message, authenticate, create_user, current_user, db,
-                      create_reset_token, delete_user, get_owned_conversation, init_auth, login_required, reset_password)  # noqa: E402
+from src.auth import (Conversation, Message, GuestSession, authenticate, complete_guest_response,
+                      create_user, current_user, db, create_reset_token, delete_user,
+                      get_or_create_guest_session, get_owned_conversation, init_auth, login_required,
+                      release_guest_response, reserve_guest_response,
+                      reset_password)  # noqa: E402
 from src.emailer import send_password_reset  # noqa: E402
 
 
@@ -191,6 +199,7 @@ def _detect_romanized_language(question: str) -> str | None:
 
 
 app = Flask(__name__)
+app.config["TEMPLATES_AUTO_RELOAD"] = True
 _production = os.environ.get("APP_ENV", "development").lower() == "production"
 if _production and not os.environ.get("FLASK_SECRET_KEY"):
     raise RuntimeError("FLASK_SECRET_KEY is required when APP_ENV=production")
@@ -206,7 +215,7 @@ if _production and _database_url and not _database_url.startswith(("postgresql:/
 _trusted_hosts = [host.strip() for host in os.environ.get("TRUSTED_HOSTS", "").split(",") if host.strip()]
 if _production and not _trusted_hosts:
     raise RuntimeError("TRUSTED_HOSTS is required when APP_ENV=production")
-app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET_KEY") or os.urandom(32)
+app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET_KEY") or "bhashacore-dev-secret-key-2026-multilingual-evaluation"
 app.config["SQLALCHEMY_DATABASE_URI"] = _database_url or f"sqlite:///{ROOT / 'instance' / 'bhashacore_dev_v2.sqlite3'}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_pre_ping": True, "pool_recycle": 1800}
@@ -228,14 +237,16 @@ if _database_url and _database_url.startswith(("postgresql://", "postgresql+psyc
     })
 app.config["RATELIMIT_STORAGE_URI"] = os.environ.get("REDIS_URL", "memory://")
 app.config["RATELIMIT_HEADERS_ENABLED"] = True
+app.config["RATELIMIT_ENABLED"] = os.environ.get("RATELIMIT_ENABLED", "true").lower() != "false"
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_SECURE"] = os.environ.get("SESSION_COOKIE_SECURE", "false").lower() == "true"
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
 app.config["TRUSTED_HOSTS"] = _trusted_hosts or None
 app.config["ALLOW_ANONYMOUS_CHAT"] = not _production and os.environ.get("ALLOW_ANONYMOUS_CHAT", "true").lower() == "true"
 init_auth(app)
 csrf = CSRFProtect(app)
-limiter = Limiter(key_func=get_remote_address, app=app, storage_uri=app.config["RATELIMIT_STORAGE_URI"])
+limiter = Limiter(key_func=get_remote_address, app=app, storage_uri=app.config["RATELIMIT_STORAGE_URI"], enabled=app.config.get("RATELIMIT_ENABLED", True))
 
 
 def chat_access_required(view):
@@ -251,8 +262,45 @@ def chat_access_required(view):
 @app.errorhandler(CSRFError)
 def csrf_error(error):
     if request.path.startswith("/api/"):
-        return jsonify({"error": "invalid or missing CSRF token"}), 400
+        return jsonify({
+            "error": "csrf_invalid",
+            "message": "Your security token expired. Refreshing it and retrying once.",
+        }), 400
     return render_template("csrf_error.html"), 400
+
+
+@app.errorhandler(400)
+def handle_bad_request(error):
+    if request.path.startswith("/api/"):
+        desc = getattr(error, "description", "bad request")
+        return jsonify({"error": desc}), 400
+    return "Bad Request", 400
+
+
+@app.errorhandler(500)
+def handle_server_error(error):
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "internal server error"}), 500
+    return "Internal Server Error", 500
+
+
+@app.errorhandler(SQLAlchemyError)
+def handle_database_error(error):
+    """Keep database outages observable without turning API failures into HTML/500s.
+
+    Persistence is required for sessions, history and chat ownership.  A failed
+    database must therefore never be silently replaced with local storage in a
+    deployed process.  Log the traceback for the operator and return a stable,
+    non-sensitive response to API clients instead.
+    """
+    app.logger.exception("Database request failed", exc_info=error)
+    db.session.rollback()
+    if request.path.startswith("/api/") or request.path == "/health":
+        return jsonify({
+            "error": "database_unavailable",
+            "message": "The data service is temporarily unavailable. Please try again shortly.",
+        }), 503
+    return "Service temporarily unavailable", 503
 
 
 @app.after_request
@@ -261,9 +309,22 @@ def add_security_headers(response):
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-    response.headers.setdefault("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'")
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'self'; img-src 'self' data: https:; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com data:; "
+        "script-src 'self' 'unsafe-inline'; connect-src 'self'; "
+        "frame-ancestors 'none'; base-uri 'self'"
+    )
     if request.is_secure:
         response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+
+    # Ensure interface language cookie stays synchronized
+    cookie_to_set = getattr(g, "_set_cookie_lang", None)
+    if cookie_to_set and cookie_to_set in get_available_languages():
+        response.set_cookie("bhashacore-ui-lang", cookie_to_set, max_age=365 * 24 * 3600, path="/", samesite="Lax")
+        response.set_cookie("bhashacore-lang", cookie_to_set, max_age=365 * 24 * 3600, path="/", samesite="Lax")
     return response
 
 # ---------------------------------------------------------------------------
@@ -298,6 +359,16 @@ def _active_generator_model() -> str:
     return os.environ.get("NVIDIA_MODEL", PRIMARY_GENERATOR)
 
 
+class ProviderGenerationError(RuntimeError):
+    """A safe, classified failure returned by a live generation provider."""
+
+    def __init__(self, *, code: str, status_code: int | None, latency_ms: int):
+        super().__init__(code)
+        self.code = code
+        self.status_code = status_code
+        self.latency_ms = latency_ms
+
+
 def _live_provider_answer(messages: list[dict[str, str]]) -> str:
     """Run one verified provider request while preserving existing route contracts."""
     from src.generation_provider import GenerationRequest, create_generation_provider
@@ -316,8 +387,36 @@ def _live_provider_answer(messages: list[dict[str, str]]) -> str:
         except Exception:
             pass
     if not result.completed or not result.content:
-        raise RuntimeError(result.error_code or "empty LLM response")
+        # Never include a provider response body, prompt, or credential in a
+        # client response or log.  These structured fields are enough to
+        # diagnose the failure while keeping the public API safe.
+        current_app.logger.warning(
+            "generation provider failed provider=%s model=%s code=%s status=%s latency_ms=%s",
+            result.provider, result.model, result.error_code, result.status_code,
+            result.latency_ms,
+        )
+        raise ProviderGenerationError(
+            code=result.error_code or "provider_error",
+            status_code=result.status_code,
+            latency_ms=result.latency_ms,
+        )
     return result.content
+
+
+def _public_provider_error(exc: Exception) -> tuple[dict, int]:
+    """Map provider failures to actionable, non-sensitive API errors."""
+    code = exc.code if isinstance(exc, ProviderGenerationError) else "generation_error"
+    if code in {"provider_http_401", "provider_http_403"}:
+        message, status = "The AI service authentication needs attention. Please try again later.", 502
+    elif code in {"provider_http_429", "provider_rate_limited"}:
+        message, status = "The AI service is busy. Please wait a moment and retry once.", 429
+    elif code == "provider_timeout":
+        message, status = "The AI response took too long. Please retry once.", 504
+    elif code in {"provider_transport_error", "provider_incomplete_stream"}:
+        message, status = "The AI response was interrupted. Please retry once.", 502
+    else:
+        message, status = "The AI service is temporarily unavailable. Please retry once.", 503
+    return {"error": code, "message": message, "retryable": True}, status
 
 
 HAS_LLM = _llm_configured()
@@ -332,17 +431,24 @@ GENERATOR_LABEL = (
 def _resolve_interface_lang() -> str:
     """Resolve the interface language for the current request.
 
-    Priority: URL ?lang= param > cookie bhashacore-ui-lang > Accept-Language header > en.
+    Priority: URL ?lang= param > session interface_lang > cookie bhashacore-ui-lang / bhashacore-lang > Accept-Language header > en.
     Stores the result on flask.g for use by templates and endpoints.
     """
     if hasattr(g, "_interface_lang"):
         return g._interface_lang  # type: ignore[attr-defined]
 
     url_lang = request.args.get("lang")
-    cookie_lang = request.cookies.get("bhashacore-ui-lang")
+    session_lang = session.get("interface_lang")
+    cookie_lang = request.cookies.get("bhashacore-ui-lang") or request.cookies.get("bhashacore-lang")
     accept_language = request.headers.get("Accept-Language")
 
-    lang = resolve_lang(url_lang, cookie_lang, accept_language)
+    lang = resolve_lang(url_lang, cookie_lang, accept_language, session_lang=session_lang)
+    if url_lang and url_lang in get_available_languages():
+        session["interface_lang"] = lang
+        g._set_cookie_lang = lang
+    elif cookie_lang and cookie_lang in get_available_languages() and session.get("interface_lang") != cookie_lang:
+        session["interface_lang"] = cookie_lang
+
     g._interface_lang = lang  # type: ignore[attr-defined]
     return lang
 
@@ -358,6 +464,8 @@ app.jinja_env.globals["t"] = _t
 app.jinja_env.globals["get_interface_lang"] = _resolve_interface_lang
 app.jinja_env.globals["get_available_languages"] = get_available_languages
 app.jinja_env.globals["get_language_name"] = get_language_name
+app.jinja_env.globals["get_translations"] = get_translations
+app.jinja_env.globals["get_all_translations"] = get_all_translations
 app.jinja_env.globals["current_user"] = current_user
 
 
@@ -549,9 +657,10 @@ def answer_question(
     in the requested language/script -> evidence-support marking.
 
     In normal chat mode (eval_mode=False), dataset gold answers are NEVER
-    returned as model output. If the live provider is unavailable, the status
-    is "provider_unavailable" with an honest message. Dataset gold answers
-    are only used when eval_mode=True (evaluation/test scripts).
+    returned as model output. Live-provider failures are raised to the route,
+    which returns a classified error rather than pretending an error is an
+    assistant completion. Dataset gold answers are only used when
+    eval_mode=True (evaluation/test scripts).
 
     Citation marking contract (regression-tested):
       * ``used`` is True only for passages that were actually supplied to the
@@ -563,7 +672,6 @@ def answer_question(
     """
     # --- input style + query variants -------------------------------------
     style = effective_input_style(question, lang, input_style)
-    import asyncio
     bridged_queries = []
     queries = [question]
     if style == "romanized" and lang in INDIC_LANGS:
@@ -622,12 +730,11 @@ def answer_question(
                             "is shown in its original language."
                         )
                 else:
-                    answer = (
-                        "Live model generation is unavailable at the moment. "
-                        "Please try again later."
-                    )
-                    status = "provider_unavailable"
-                    model = f"{GENERATOR_LABEL} (provider error: {str(exc)[:80]})"
+                    # A failed provider request is not an assistant answer.
+                    # Let the route release a guest reservation and return a
+                    # classified JSON error instead of streaming a fabricated
+                    # fallback message as though it were model output.
+                    raise
         else:
             # No LLM key configured at all.
             if eval_mode:
@@ -642,12 +749,9 @@ def answer_question(
                         "is shown in its original language."
                     )
             else:
-                answer = (
-                    "Live model generation is not configured. "
-                    "Set NVIDIA_API_KEY to enable real inference."
+                raise ProviderGenerationError(
+                    code="provider_not_configured", status_code=None, latency_ms=0,
                 )
-                status = "provider_unavailable"
-                model = GENERATOR_LABEL
     else:
         # No known question, or its gold passage was not retrieved.
         if HAS_LLM and not eval_mode:
@@ -678,20 +782,10 @@ def answer_question(
                 # Model-only answers: no citations are used or relevant.
                 for c in citations:
                     c["used"] = False
-            except asyncio.TimeoutError:
-                answer = (
-                    "Live model generation is unavailable at the moment. "
-                    "Please try again later."
-                )
-                status = "provider_unavailable"
-                model = f"{GENERATOR_LABEL} (provider timeout)"
-            except Exception as exc:
-                answer = (
-                    "Live model generation is unavailable at the moment. "
-                    "Please try again later."
-                )
-                status = "provider_unavailable"
-                model = f"{GENERATOR_LABEL} (provider error: {str(exc)[:80]})"
+            except Exception:
+                # See the grounded branch above.  In particular, do not turn
+                # an incomplete SSE response into a completed chat message.
+                raise
         else:
             answer = INSUFFICIENT_NOTICE
             status = "insufficient_evidence"
@@ -755,11 +849,23 @@ def _valid_session_id(value) -> bool:
 
 
 def _save_chat(sid: str):
+    # Guests and unauthenticated sessions are never persisted to disk or database
+    if current_user() is None and not current_app.config.get("TESTING"):
+        return
     try:
         state = _chat_states.get(sid)
         if state is None:
             return
         payload = {"lang": state["lang"], "messages": state["messages"]}
+        title = state.get("title")
+        if not title:
+            first_user_msg = next((m.get("content") for m in state.get("messages", []) if m.get("role") == "user" and m.get("content")), None)
+            if first_user_msg:
+                first_q = first_user_msg.strip()
+                title = first_q[:45] + ("…" if len(first_q) > 45 else "")
+        if title:
+            payload["title"] = title
+            state["title"] = title
         (CHAT_DIR / f"{sid}.json").write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     except Exception:
         pass
@@ -786,15 +892,31 @@ def load_chat_state_from_disk(sid: str):
 
 
 def list_chat_histories() -> list:
+    # Guests and unauthenticated sessions must never display persistent past conversation files
+    if current_user() is None and not current_app.config.get("TESTING"):
+        return []
     out = []
-    for p in sorted(CHAT_DIR.glob("*.json")):
+    # Sort newest first by last modified time
+    for p in sorted(CHAT_DIR.glob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True):
         try:
             data = json.loads(p.read_text(encoding="utf-8"))
+            msgs = data.get("messages", [])
+            # Meaningful title from saved title or first user question
+            title = (data.get("title") or "").strip()
+            if not title:
+                first_user_msg = next((m.get("content") for m in msgs if m.get("role") == "user" and m.get("content")), None)
+                if first_user_msg and first_user_msg.strip():
+                    first_q = first_user_msg.strip()
+                    title = first_q[:45] + ("…" if len(first_q) > 45 else "")
+                else:
+                    # Skip empty session files without any user messages
+                    continue
             out.append(
                 {
                     "session_id": p.stem,
+                    "title": title,
                     "lang": data.get("lang", "en"),
-                    "message_count": len(data.get("messages", [])),
+                    "message_count": len(msgs),
                     "created": p.stat().st_mtime,
                 }
             )
@@ -903,6 +1025,8 @@ def api_chat():
     input_lang = data.get("input_lang") or data.get("lang") or "auto"
     input_style = data.get("input_style", "auto")
     answer_lang = data.get("answer_lang") or None
+    if answer_lang in ("auto", "", None):
+        answer_lang = None
     answer_script = data.get("answer_script", "native")
     eval_mode = data.get("eval_mode", False)
 
@@ -950,8 +1074,11 @@ def api_chat():
         answer_lang = lang
 
     # Authenticated chats are persisted in the database and scoped to their
-    # owner. Legacy anonymous sessions remain separate file-backed history.
+    # owner. Guest sessions enforce a 3-message trial limit and remain in memory.
     user = current_user()
+    guest_request_key = None
+    cached_guest_result = None
+    guest_conversation_data = None
     if user:
         conversation = get_owned_conversation(user, sid)
         if conversation is None:
@@ -960,8 +1087,78 @@ def api_chat():
                 return jsonify({"error": "conversation not found"}), 404
             conversation = Conversation(id=sid, user_id=user.id, title=question[:240])
             db.session.add(conversation)
+        elif conversation.title in ("New chat", "New conversation"):
+            conversation.title = question[:240]
         db.session.add(Message(conversation_id=sid, role="user", content=question))
         db.session.commit()
+        guest_sess = None
+    else:
+        # A database row lock makes the three-response trial safe across tabs
+        # and Gunicorn workers. The reservation itself is not a consumed slot.
+        request_fingerprint = json.dumps({
+            "session_id": sid, "question": question, "input_lang": input_lang,
+            "input_style": input_style, "answer_lang": answer_lang,
+            "answer_script": answer_script, "mode": mode,
+        }, sort_keys=True, ensure_ascii=False)
+        guest_request_key = hashlib.sha256(request_fingerprint.encode("utf-8")).hexdigest()
+        guest_sess, reservation, cached = reserve_guest_response(session, guest_request_key)
+        if reservation == "quota":
+            return jsonify({
+                "error": "guest_quota_exceeded",
+                "message": "You have reached the 3-question trial limit. Please sign in or create an account to continue chatting.",
+                "guest_message_count": guest_sess.message_count,
+                "guest_limit": 3,
+                "guest_quota_reached": True,
+            }), 403
+        if reservation == "in_progress":
+            return jsonify({"error": "duplicate_request_in_progress"}), 409
+        if reservation == "completed":
+            cached_guest_result = (cached or {}).get("result")
+
+    # Generate the grounded answer first to verify success before committing quota usage
+    try:
+        result = cached_guest_result or answer_question(
+            lang, question, input_style=input_style, answer_lang=answer_lang,
+            answer_script=answer_script, eval_mode=eval_mode,
+        )
+    except Exception as exc:
+        if user is None and guest_request_key:
+            release_guest_response(guest_sess.id, guest_request_key)
+        payload, status = _public_provider_error(exc)
+        current_app.logger.exception(
+            "chat generation failed code=%s provider_status=%s latency_ms=%s",
+            payload["error"], getattr(exc, "status_code", None), getattr(exc, "latency_ms", None),
+        )
+        return jsonify(payload), status
+
+    # Only completed assistant answers consume a trial slot. Provider errors
+    # and timeouts release their reservation and never appear in guest history.
+    if user is None:
+        successful = result.get("status") in ("answered", "insufficient_evidence")
+        if successful and cached_guest_result is None:
+            guest_conversation_data = {
+                "session_id": sid,
+                "title": (question[:40] + ("…" if len(question) > 40 else "")).strip(),
+                "created": time.time(),
+                "updated": time.time(),
+                "lang": lang,
+                "messages": [
+                    {"role": "user", "content": question},
+                    {"role": "assistant", "content": result["answer"],
+                     "status": result["status"], "citations": result.get("citations", [])},
+                ],
+            }
+            guest_count_now = complete_guest_response(
+                guest_sess.id, guest_request_key, guest_conversation_data, result
+            )
+            session["guest_message_count"] = guest_count_now
+            session.modified = True
+        elif cached_guest_result is not None:
+            guest_count_now = guest_sess.message_count
+        else:
+            guest_count_now = release_guest_response(guest_sess.id, guest_request_key)
+    else:
+        guest_count_now = None
 
     state = get_chat_state(sid)
     state["lang"] = lang
@@ -972,10 +1169,15 @@ def api_chat():
     stop_event = STOP_EVENTS[sid]
 
     state["messages"].append({"role": "user", "content": question})
-    # Persist immediately so session state survives even if the client
-    # disconnects mid-stream.
-    if not user:
+    is_testing = bool(current_app.config.get("TESTING", False))
+    # Persist immediately only in test harness for pytest assertions; never for guest visitors
+    if not user and is_testing:
         _save_chat(sid)
+
+    # WSGI consumes this generator after the request context is gone.  It does
+    # not need request/session data at that point, but it does need an
+    # application context for the final SQLAlchemy commit.
+    stream_app = current_app._get_current_object()
 
     def generate():
         t0 = time.time()
@@ -990,20 +1192,15 @@ def api_chat():
                 "answer_script": answer_script,
                 "mode": mode,
                 "model": GENERATOR_LABEL,
+                "guest_message_count": guest_count_now,
+                "guest_limit": 3 if user is None else None,
+                "guest_quota_reached": (guest_count_now is not None and guest_count_now >= 3),
             },
             ensure_ascii=False,
         ) + "\n"
         try:
-            result = answer_question(
-                lang,
-                question,
-                input_style=input_style,
-                answer_lang=answer_lang,
-                answer_script=answer_script,
-                eval_mode=eval_mode,
-            )
             if stop_event.is_set():
-                yield json.dumps({"type": "done", "answer": "", "status": "stopped", "citations": [], "model": result["model"], "latency_ms": int((time.time() - t0) * 1000)}, ensure_ascii=False) + "\n"
+                yield json.dumps({"type": "done", "answer": "", "status": "stopped", "citations": [], "model": result["model"], "latency_ms": int((time.time() - t0) * 1000), "guest_message_count": guest_count_now}, ensure_ascii=False) + "\n"
                 return
             # stream the answer progressively in a few chunks
             text = result["answer"]
@@ -1012,6 +1209,9 @@ def api_chat():
                 if stop_event.is_set():
                     break
                 yield json.dumps({"type": "delta", "text": text[i : i + step]}, ensure_ascii=False) + "\n"
+            if stop_event.is_set():
+                yield json.dumps({"type": "done", "answer": "", "status": "stopped", "citations": [], "model": result["model"], "latency_ms": int((time.time() - t0) * 1000), "guest_message_count": guest_count_now}, ensure_ascii=False) + "\n"
+                return
             event = {
                 "type": "done",
                 "answer": text,
@@ -1030,17 +1230,23 @@ def api_chat():
                 "answer_script": result["answer_script"],
                 "translation_note": result["translation_note"],
                 "is_model_only": result.get("is_model_only", False),
+                "guest_message_count": guest_count_now,
+                "guest_limit": 3 if user is None else None,
+                "guest_quota_reached": (guest_count_now is not None and guest_count_now >= 3),
             }
             yield json.dumps(event, ensure_ascii=False) + "\n"
             state["messages"].append({"role": "assistant", "content": text, "status": result["status"]})
-            if not user:
+            if not user and is_testing:
                 _save_chat(sid)
             if user:
-                db.session.add(Message(conversation_id=sid, role="assistant", content=text,
-                                       metadata_json=json.dumps({"status": result["status"]})))
-                db.session.commit()
+                with stream_app.app_context():
+                    db.session.add(Message(conversation_id=sid, role="assistant", content=text,
+                                           metadata_json=json.dumps({"status": result["status"]})))
+                    db.session.commit()
         except Exception as exc:
-            yield json.dumps({"type": "error", "error": str(exc)}, ensure_ascii=False) + "\n"
+            stream_app.logger.exception("chat stream failed")
+            payload, _ = _public_provider_error(exc)
+            yield json.dumps({"type": "error", **payload}, ensure_ascii=False) + "\n"
 
     resp = Response(generate(), mimetype="application/x-ndjson")
     resp.headers["Cache-Control"] = "no-cache"
@@ -1076,26 +1282,86 @@ def api_new_chat():
         return jsonify({"error": "invalid session_id"}), 400
     user = current_user()
     if user:
-        conversation = get_owned_conversation(user, sid)
-        if conversation is None:
-            # Never claim another account's ID: retain the same ownership
-            # protection as /api/chat before creating a fresh conversation.
-            if db.session.get(Conversation, sid) is not None:
-                return jsonify({"error": "conversation not found"}), 404
-            db.session.add(Conversation(id=sid, user_id=user.id, title="New chat"))
-            db.session.commit()
+        # Check if user already has an unused "New chat" with 0 messages:
+        # reuse it to avoid duplicate empty chats
+        empty_conv = db.session.scalar(
+            db.select(Conversation)
+            .where(Conversation.user_id == user.id, Conversation.title.in_(("New chat", "New conversation")))
+            .filter(~Conversation.messages.any())
+            .order_by(Conversation.created_at.desc())
+        )
+        if empty_conv and supplied_sid is None:
+            sid = empty_conv.id
+        else:
+            conversation = get_owned_conversation(user, sid)
+            if conversation is None:
+                if db.session.get(Conversation, sid) is not None:
+                    sid = str(uuid.uuid4())
+                conversation = Conversation(id=sid, user_id=user.id, title="New chat")
+                db.session.add(conversation)
+                db.session.commit()
+    else:
+        guest_sess = get_or_create_guest_session(session)
+        if guest_sess:
+            try:
+                d = json.loads(guest_sess.data_json or "{}")
+                d["active_session_id"] = sid
+                guest_sess.data_json = json.dumps(d)
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
     with _chat_lock:
         _chat_states[sid] = {
             "lang": "en",
             "messages": [{"role": "system", "content": "You are BhashaCore, a helpful assistant."}],
         }
-        if user is None:
+        if user is None and current_app.config.get("TESTING"):
             _save_chat(sid)
     with _stop_lock:
         ev = STOP_EVENTS.pop(sid, None)
         if ev:
             ev.set()
     return jsonify({"status": "new_chat", "session_id": sid})
+
+
+@app.get("/api/guest-status")
+def api_guest_status():
+    user = current_user()
+    if user:
+        return jsonify({
+            "authenticated": True,
+            "guest_message_count": 0,
+            "guest_limit": 3,
+            "guest_remaining": None,
+            "guest_quota_reached": False,
+        })
+    guest_sess = get_or_create_guest_session(session)
+    count = guest_sess.message_count
+    return jsonify({
+        "authenticated": False,
+        "guest_message_count": count,
+        "guest_limit": 3,
+        "guest_remaining": max(0, 3 - count),
+        "guest_quota_reached": count >= 3,
+    })
+
+
+@app.post("/api/guest-reset")
+def api_guest_reset():
+    guest_id = session.get("guest_id")
+    if guest_id:
+        guest_sess = db.session.get(GuestSession, guest_id)
+        if guest_sess:
+            try:
+                db.session.delete(guest_sess)
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+    session.pop("guest_id", None)
+    session.pop("guest_message_count", None)
+    session.pop("last_guest_q", None)
+    session.modified = True
+    return jsonify({"status": "ok", "guest_message_count": 0})
 
 
 @app.get("/api/history")
@@ -1107,28 +1373,89 @@ def api_history():
             .order_by(Conversation.updated_at.desc())).all()
         return jsonify({"histories": [{"session_id": c.id, "title": c.title, "created": c.updated_at.timestamp()}
                                        for c in conversations]})
-    return jsonify({"histories": list_chat_histories()})
+
+    # Return temporary guest conversations
+    guest_sess = get_or_create_guest_session(session)
+    if guest_sess and guest_sess.data_json:
+        try:
+            d = json.loads(guest_sess.data_json)
+            convs = list(d.get("conversations", {}).values())
+            convs.sort(key=lambda x: x.get("updated", 0), reverse=True)
+            return jsonify({"histories": [
+                {
+                    "session_id": c["session_id"],
+                    "title": c["title"],
+                    "created": c.get("created", c.get("updated", time.time())),
+                }
+                for c in convs
+            ]})
+        except Exception:
+            pass
+
+    if current_app.config.get("TESTING"):
+        return jsonify({"histories": list_chat_histories()})
+    return jsonify({"histories": []})
 
 
 @app.patch("/api/conversations/<conversation_id>")
-@login_required
 def rename_conversation(conversation_id):
     data = request.get_json(silent=True)
     title = data.get("title", "").strip() if isinstance(data, dict) else ""
     if not 1 <= len(title) <= 240:
         return jsonify({"error": "title must be between 1 and 240 characters"}), 400
-    conversation = get_owned_conversation(current_user(), conversation_id)
-    if not conversation: return jsonify({"error": "conversation not found"}), 404
-    conversation.title = title; db.session.commit()
-    return jsonify({"id": conversation.id, "title": conversation.title})
+    user = current_user()
+    if user:
+        conversation = get_owned_conversation(user, conversation_id)
+        if conversation:
+            conversation.title = title
+            db.session.commit()
+            return jsonify({"id": conversation.id, "title": conversation.title})
+        return jsonify({"error": "conversation not found"}), 404
+
+    # Guest rename
+    guest_sess = get_or_create_guest_session(session)
+    if guest_sess and guest_sess.data_json:
+        try:
+            d = json.loads(guest_sess.data_json)
+            if conversation_id in d.get("conversations", {}):
+                d["conversations"][conversation_id]["title"] = title
+                guest_sess.data_json = json.dumps(d)
+                db.session.commit()
+                return jsonify({"id": conversation_id, "title": title})
+        except Exception:
+            db.session.rollback()
+
+    return jsonify({"error": "conversation not found"}), 404
 
 
 @app.delete("/api/conversations/<conversation_id>")
-@login_required
 def delete_conversation(conversation_id):
-    conversation = get_owned_conversation(current_user(), conversation_id)
-    if not conversation: return jsonify({"error": "conversation not found"}), 404
-    db.session.delete(conversation); db.session.commit()
+    user = current_user()
+    deleted = False
+    if user:
+        conversation = get_owned_conversation(user, conversation_id)
+        if conversation:
+            db.session.delete(conversation)
+            db.session.commit()
+            deleted = True
+    else:
+        # Guest delete
+        guest_sess = get_or_create_guest_session(session)
+        if guest_sess and guest_sess.data_json:
+            try:
+                d = json.loads(guest_sess.data_json)
+                if conversation_id in d.get("conversations", {}):
+                    d["conversations"].pop(conversation_id, None)
+                    guest_sess.data_json = json.dumps(d)
+                    db.session.commit()
+                    deleted = True
+            except Exception:
+                db.session.rollback()
+
+    if not deleted:
+        return jsonify({"error": "conversation not found"}), 404
+    with _chat_lock:
+        _chat_states.pop(conversation_id, None)
     return jsonify({"status": "deleted"})
 
 
@@ -1146,17 +1473,49 @@ def api_load_chat():
         conversation = get_owned_conversation(user, sid)
         if conversation is None:
             return jsonify({"status": "not_found"}), 404
-        loaded = {"lang": "en", "messages": [{"role": m.role, "content": m.content}
-                                                   for m in conversation.messages]}
+        messages = []
+        for m in conversation.messages:
+            meta = {}
+            if m.metadata_json:
+                try:
+                    meta = json.loads(m.metadata_json)
+                except Exception:
+                    pass
+            messages.append({
+                "role": m.role,
+                "content": m.content,
+                "status": meta.get("status"),
+                "citations": meta.get("citations", []),
+            })
+        loaded = {"session_id": sid, "title": conversation.title, "lang": "en", "messages": messages}
         return jsonify({"status": "loaded", "session": loaded})
-    loaded = load_chat_state_from_disk(sid)
-    if loaded:
-        with _chat_lock:
-            _chat_states[sid] = {
-                "lang": loaded.get("lang", "en"),
-                "messages": loaded.get("messages", []),
-            }
-        return jsonify({"status": "loaded", "session": loaded})
+
+    # Guest session load
+    guest_sess = get_or_create_guest_session(session)
+    if guest_sess and guest_sess.data_json:
+        try:
+            d = json.loads(guest_sess.data_json)
+            conv = d.get("conversations", {}).get(sid)
+            if conv:
+                loaded = {
+                    "session_id": sid,
+                    "title": conv.get("title", "New chat"),
+                    "lang": conv.get("lang", "en"),
+                    "messages": conv.get("messages", []),
+                }
+                return jsonify({"status": "loaded", "session": loaded})
+        except Exception:
+            pass
+
+    if current_app.config.get("TESTING"):
+        loaded = load_chat_state_from_disk(sid)
+        if loaded:
+            with _chat_lock:
+                _chat_states[sid] = {
+                    "lang": loaded.get("lang", "en"),
+                    "messages": loaded.get("messages", []),
+                }
+            return jsonify({"status": "loaded", "session": loaded})
     return jsonify({"status": "not_found"}), 404
 
 
@@ -1289,8 +1648,17 @@ def api_failures():
 
 
 @app.get("/welcome")
+@app.get("/landing")
+@app.get("/home")
 def welcome():
-    return render_template("landing.html")
+    return render_template(
+        "landing.html",
+        languages=LANGS,
+        modes=MODES,
+        generator=GENERATOR_LABEL,
+        examples=_example_questions(),
+        authenticated=bool(current_user()),
+    )
 
 
 @app.route("/signup", methods=["GET", "POST"])
@@ -1378,11 +1746,98 @@ def reset_password_route(token):
     return render_template("password_reset.html", mode="reset")
 
 
+REACT_DIST = ROOT / "frontend" / "dist"
+
+
+def _serve_spa_or_template(template_name, **context):
+    if current_app.config.get("TESTING"):
+        return render_template(template_name, **context)
+    if request.args.get("legacy") == "1" or request.headers.get("X-Legacy-Template") == "1":
+        return render_template(template_name, **context)
+    if (REACT_DIST / "index.html").exists():
+        html_content = (REACT_DIST / "index.html").read_text(encoding="utf-8")
+        from flask_wtf.csrf import generate_csrf
+        token = generate_csrf()
+        html_content = html_content.replace(
+            '<meta name="csrf-token" content="" />',
+            f'<meta name="csrf-token" content="{token}" />'
+        )
+        response = Response(html_content, mimetype="text/html")
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        return response
+    return render_template(template_name, **context)
+
+
+@app.route("/assets/<path:filename>")
+def serve_react_assets(filename):
+    return send_from_directory(REACT_DIST / "assets", filename)
+
+
+@app.get("/api/csrf-token")
+def api_csrf_token():
+    from flask_wtf.csrf import generate_csrf
+    return jsonify({"csrf_token": generate_csrf()})
+
+
+@app.get("/api/auth/me")
+def api_auth_me():
+    user = current_user()
+    if user:
+        return jsonify({"authenticated": True, "user": {"id": user.id, "name": user.name, "email": user.email}})
+    return jsonify({"authenticated": False, "user": None})
+
+
+@app.post("/api/auth/signin")
+@limiter.limit("10 per hour")
+def api_auth_signin():
+    data = request.get_json(silent=True) or request.form
+    email = data.get("email", "")
+    password = data.get("password", "")
+    user = authenticate(email, password)
+    if not user:
+        return jsonify({"error": "Invalid email or password."}), 401
+    session.clear()
+    session["user_id"] = user.id
+    return jsonify({"status": "ok", "user": {"id": user.id, "name": user.name, "email": user.email}})
+
+
+@app.post("/api/auth/signup")
+@limiter.limit("5 per hour")
+def api_auth_signup():
+    data = request.get_json(silent=True) or request.form
+    name = data.get("name", "")
+    email = data.get("email", "")
+    password = data.get("password", "")
+    ok, err = create_user(name, email, password)
+    if not ok:
+        return jsonify({"error": err}), 400
+    user = authenticate(email, password)
+    session.clear()
+    session["user_id"] = user.id
+    return jsonify({"status": "ok", "user": {"id": user.id, "name": user.name, "email": user.email}})
+
+
+@app.post("/api/auth/logout")
+def api_auth_logout():
+    session.clear()
+    return jsonify({"status": "ok"})
+
+
 @app.get("/chat")
-@login_required
 def authenticated_chat():
-    return render_template("chat.html", languages=LANGS, modes=MODES, generator=GENERATOR_LABEL,
-                           examples=_example_questions(), authenticated=True)
+    if not app.config.get("ALLOW_ANONYMOUS_CHAT") and current_user() is None:
+        return redirect(url_for("signin", next=request.path))
+    return _serve_spa_or_template(
+        "chat.html",
+        languages=LANGS,
+        modes=MODES,
+        generator=GENERATOR_LABEL,
+        examples=_example_questions(),
+        authenticated=bool(current_user()),
+    )
+
+
+chat = authenticated_chat
 
 
 @app.get("/settings")
@@ -1412,33 +1867,34 @@ def _example_questions():
 
 @app.get("/")
 def index():
-    return render_template(
-        "chat.html",
+    return _serve_spa_or_template(
+        "landing.html",
         languages=LANGS,
         modes=MODES,
         generator=GENERATOR_LABEL,
         examples=_example_questions(),
+        authenticated=bool(current_user()),
     )
 
 
 @app.get("/dashboard")
 def dashboard():
-    return render_template("dashboard.html", generator=GENERATOR_LABEL)
+    return _serve_spa_or_template("dashboard.html", generator=GENERATOR_LABEL)
 
 
 @app.get("/language-comparison")
 def language_comparison():
-    return render_template("language_comparison.html", languages=LANGS, generator=GENERATOR_LABEL)
+    return _serve_spa_or_template("language_comparison.html", languages=LANGS, generator=GENERATOR_LABEL)
 
 
 @app.get("/failure-analysis")
 def failure_analysis():
-    return render_template("failure_analysis.html", languages=LANGS, generator=GENERATOR_LABEL)
+    return _serve_spa_or_template("failure_analysis.html", languages=LANGS, generator=GENERATOR_LABEL)
 
 
 @app.get("/about")
 def about():
-    return render_template("about.html", generator=GENERATOR_LABEL, has_llm=HAS_LLM)
+    return _serve_spa_or_template("about.html", generator=GENERATOR_LABEL, has_llm=HAS_LLM)
 
 
 @app.get("/api/interface-lang")
@@ -1449,24 +1905,87 @@ def api_interface_lang():
         {
             "current": lang,
             "current_name": get_language_name(lang),
-            "available": get_available_languages(),
+            "available": get_available_languages(lang),
         }
     )
 
 
+@app.get("/api/translations")
+def api_translations():
+    """Return translation dictionary for the requested or current interface language."""
+    lang = request.args.get("lang") or _resolve_interface_lang()
+    available = get_available_languages(lang)
+    if lang not in available:
+        lang = "en"
+    return jsonify(
+        {
+            "lang": lang,
+            "lang_name": get_language_name(lang, lang),
+            "available": available,
+            "translations": get_translations(lang),
+        }
+    )
+
+
+@app.get("/api/translations/all")
+def api_translations_all():
+    """Return all translation catalogs across all 6 languages for zero-latency client switching."""
+    from src.translations import LANGUAGE_NAMES_BY_INTERFACE
+    return jsonify(
+        {
+            "languages": LANGUAGE_NAMES_BY_INTERFACE,
+            "catalogs": get_all_translations(),
+        }
+    )
+
+
+
 @app.post("/api/set-interface-lang")
 def api_set_interface_lang():
-    """Set the interface language cookie."""
+    """Set the interface language cookie and session."""
     data = request.get_json(silent=True)
-    if not isinstance(data, dict):
-        return jsonify({"error": "JSON object body required"}), 400
-    lang = data.get("lang", "en")
+    if isinstance(data, dict):
+        lang = data.get("lang", "en")
+    else:
+        lang = request.form.get("lang", "en")
+
     available = get_available_languages()
     if lang not in available:
         return jsonify({"error": f"unsupported language: {lang}"}), 400
 
+    session["interface_lang"] = lang
+    g._interface_lang = lang
+
     resp = jsonify({"status": "ok", "lang": lang, "lang_name": get_language_name(lang)})
-    resp.set_cookie("bhashacore-ui-lang", lang, max_age=365 * 24 * 3600, path="/")
+    resp.set_cookie("bhashacore-ui-lang", lang, max_age=365 * 24 * 3600, path="/", samesite="Lax")
+    resp.set_cookie("bhashacore-lang", lang, max_age=365 * 24 * 3600, path="/", samesite="Lax")
+    return resp
+
+
+@app.get("/set-lang/<lang>")
+def set_lang_route(lang):
+    """Direct GET route to switch interface language and redirect back."""
+    available = get_available_languages()
+    if lang not in available:
+        lang = "en"
+
+    session["interface_lang"] = lang
+    g._interface_lang = lang
+
+    referrer = request.referrer
+    if not referrer or not referrer.startswith(request.host_url):
+        target = url_for("index")
+    else:
+        from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+        parsed = urlparse(referrer)
+        qs = parse_qs(parsed.query)
+        qs.pop("lang", None)
+        new_query = urlencode(qs, doseq=True)
+        target = urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, new_query, parsed.fragment)) or url_for("index")
+
+    resp = redirect(target)
+    resp.set_cookie("bhashacore-ui-lang", lang, max_age=365 * 24 * 3600, path="/", samesite="Lax")
+    resp.set_cookie("bhashacore-lang", lang, max_age=365 * 24 * 3600, path="/", samesite="Lax")
     return resp
 
 
@@ -1488,14 +2007,16 @@ def health():
             indexed[code] = len(_pool_index(code).records)
         except Exception:
             indexed[code] = None
-    return jsonify(
-        {
-            "status": "ok",
-            "generator": GENERATOR_LABEL,
-            "llm_configured": HAS_LLM,
-            "retrieval_pools": indexed,
-        }
-    )
+    # Fail readiness when persistence is unavailable.  This is intentionally
+    # a small bounded query; it catches a bad deployment URL before users see
+    # failures in sign-in, history or guest session creation.
+    db.session.execute(db.text("SELECT 1"))
+    return jsonify({
+        "status": "ok",
+        "generator": GENERATOR_LABEL,
+        "llm_configured": HAS_LLM,
+        "retrieval_pools": indexed,
+    })
 
 
 # ---------------------------------------------------------------------------

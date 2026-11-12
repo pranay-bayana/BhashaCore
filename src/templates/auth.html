@@ -1,19 +1,169 @@
 {% extends "base.html" %}
 {% block title %}{{ t('auth_sign_up') if form == 'signup' else t('auth_sign_in') }}{% endblock %}
+
+{% block head %}
+<style>
+  .auth-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 3rem 1rem;
+    min-height: calc(100vh - 220px);
+  }
+  .auth-box {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
+    backdrop-filter: blur(28px) saturate(160%);
+    -webkit-backdrop-filter: blur(28px) saturate(160%);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: var(--radius-xl);
+    padding: 2.25rem;
+    max-width: 440px;
+    width: 100%;
+    box-shadow: inset 0 1px 1.5px rgba(255, 255, 255, 0.25), 0 24px 60px rgba(0, 0, 0, 0.8), 0 0 32px rgba(183, 255, 114, 0.1);
+  }
+  .auth-header {
+    text-align: center;
+    margin-bottom: 1.5rem;
+  }
+  .auth-form-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .field-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .field-group label {
+    font-size: 0.84rem;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .input-with-action {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+  .input-with-action input {
+    width: 100%;
+    padding-right: 60px;
+  }
+  .toggle-pwd-btn {
+    position: absolute;
+    right: 8px;
+    background: transparent;
+    border: none;
+    color: var(--accent-cyan);
+    font-size: 0.76rem;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 4px 6px;
+  }
+  .checkbox-group {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    margin-top: 4px;
+  }
+  .checkbox-group input {
+    margin-top: 3px;
+    accent-color: var(--accent-primary);
+  }
+  .auth-footer {
+    text-align: center;
+    margin-top: 1.5rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--border-subtle);
+    font-size: 0.84rem;
+    color: var(--text-secondary);
+  }
+</style>
+{% endblock %}
+
 {% block content %}
-<section class="auth-card card">
-  <span class="eyebrow">BhashaCore</span><h1>{{ t('auth_sign_up') if form == 'signup' else t('auth_sign_in') }}</h1>
-  <p class="subtitle">{{ t('auth_password_hint') if form == 'signup' else t('auth_workspace') }}</p>
-  {% with messages = get_flashed_messages(with_categories=true) %}{% for category, message in messages %}<div class="notice {{ category }}">{{ message }}</div>{% endfor %}{% endwith %}
-  <form method="post" class="auth-form" novalidate>
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    {% if form == 'signup' %}<label>{{ t('auth_full_name') }}<input name="name" required minlength="2" maxlength="100" autocomplete="name"></label>{% endif %}
-    <label>{{ t('auth_email') }}<input name="email" required type="email" autocomplete="email"></label>
-    <label>{{ t('auth_password') }}<div class="password-wrap"><input id="password" name="password" required type="password" minlength="12" autocomplete="{{ 'new-password' if form == 'signup' else 'current-password' }}"><button type="button" class="text-btn" onclick="togglePassword('password')">{{ t('auth_show') }}</button></div></label>
-    {% if form == 'signup' %}<label>{{ t('auth_confirm_password') }}<div class="password-wrap"><input id="confirm_password" name="confirm_password" required type="password" minlength="12" autocomplete="new-password"><button type="button" class="text-btn" onclick="togglePassword('confirm_password')">{{ t('auth_show') }}</button></div></label><label class="check"><input name="consent" type="checkbox" required> {{ t('auth_consent') }}</label>{% endif %}
-    <button class="btn" type="submit">{{ t('auth_sign_up') if form == 'signup' else t('auth_sign_in') }}</button>
-  </form>
-  <p class="hint">{% if form == 'signup' %}<a href="/signin">{{ t('auth_sign_in') }}</a>{% else %}<a href="/signup">{{ t('auth_sign_up') }}</a> · <a href="/forgot-password">{{ t('auth_forgot') }}</a>{% endif %}</p>
-</section>
-<script>function togglePassword(id){const input=document.getElementById(id);input.type=input.type==='password'?'text':'password';}</script>
+<div class="auth-wrapper">
+  <div class="auth-box card">
+    <div class="auth-header">
+      <div class="brand-logo-mark" style="width:40px; height:40px; margin:0 auto 12px; font-size:1.2rem;">B</div>
+      <span class="eyebrow">{{ t('brand') }}</span>
+      <h1 style="font-size:1.6rem; margin-top:4px;">{{ t('auth_sign_up') if form == 'signup' else t('auth_sign_in') }}</h1>
+      <p class="subtitle" style="margin-bottom:0;">
+        {{ t('auth_password_hint') if form == 'signup' else t('auth_workspace') }}
+      </p>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div class="notice {{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    <form method="post" class="auth-form-fields" novalidate>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      {% if form == 'signup' %}
+      <div class="field-group">
+        <label for="nameInput">{{ t('auth_full_name') }}</label>
+        <input id="nameInput" name="name" class="select-input" required minlength="2" maxlength="100" autocomplete="name" placeholder="{{ t('auth_name_placeholder') }}" data-i18n-placeholder="auth_name_placeholder">
+      </div>
+      {% endif %}
+
+      <div class="field-group">
+        <label for="emailInput">{{ t('auth_email') }}</label>
+        <input id="emailInput" name="email" class="select-input" required type="email" autocomplete="email" placeholder="{{ t('auth_email_placeholder') }}" data-i18n-placeholder="auth_email_placeholder">
+      </div>
+
+      <div class="field-group">
+        <label for="password">{{ t('auth_password') }}</label>
+        <div class="input-with-action">
+          <input id="password" name="password" class="select-input" required type="password" minlength="12" autocomplete="{{ 'new-password' if form == 'signup' else 'current-password' }}">
+          <button type="button" class="toggle-pwd-btn text-btn" onclick="togglePassword('password')">{{ t('auth_show') }}</button>
+        </div>
+      </div>
+
+      {% if form == 'signup' %}
+      <div class="field-group">
+        <label for="confirm_password">{{ t('auth_confirm_password') }}</label>
+        <div class="input-with-action">
+          <input id="confirm_password" name="confirm_password" class="select-input" required type="password" minlength="12" autocomplete="new-password">
+          <button type="button" class="toggle-pwd-btn text-btn" onclick="togglePassword('confirm_password')">{{ t('auth_show') }}</button>
+        </div>
+      </div>
+
+      <label class="checkbox-group check">
+        <input name="consent" type="checkbox" required>
+        <span>{{ t('auth_consent') }}</span>
+      </label>
+      {% endif %}
+
+      <div style="margin-top:8px;">
+        <button type="submit" class="btn btn-primary" style="width:100%; padding:0.75rem;">
+          {{ t('auth_sign_up') if form == 'signup' else t('auth_sign_in') }}
+        </button>
+      </div>
+    </form>
+
+    <div class="auth-footer hint">
+      {% if form == 'signup' %}
+      <span><span data-i18n="auth_already_have_account">{{ t('auth_already_have_account') }}</span> <a href="/signin" data-i18n="auth_sign_in">{{ t('auth_sign_in') }}</a></span>
+      {% else %}
+      <div><a href="/signup" data-i18n="auth_sign_up">{{ t('auth_sign_up') }}</a> · <a href="/forgot-password" data-i18n="auth_forgot">{{ t('auth_forgot') }}</a></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+function togglePassword(id) {
+    const input = document.getElementById(id);
+    if (!input) return;
+    input.type = input.type === 'password' ? 'text' : 'password';
+}
+</script>
 {% endblock %}

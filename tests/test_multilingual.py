@@ -61,7 +61,7 @@ def _force_dataset_gold(monkeypatch):
 
 def test_auto_detect_resolves_native_script(client, monkeypatch):
     _force_dataset_gold(monkeypatch)
-    _, events = _chat(client, {"input_lang": "auto", "question": "ताजमहल कहां स्थित है?"})
+    _, events = _chat(client, {"input_lang": "auto", "question": "ताजमहल कहां स्थित है?", "eval_mode": True})
     done = _done(events)
     assert done["input_lang"] == "hi"
     assert done["input_detected_script"] == "Devanagari"
@@ -71,7 +71,7 @@ def test_auto_detect_resolves_native_script(client, monkeypatch):
 def test_auto_detect_latin_is_flagged_ambiguous(client, monkeypatch):
     _force_dataset_gold(monkeypatch)
     # Latin input must NOT be silently treated as English without a flag
-    _, events = _chat(client, {"input_lang": "auto", "question": "What is the airspeed velocity of an unladen swallow?"})
+    _, events = _chat(client, {"input_lang": "auto", "question": "What is the airspeed velocity of an unladen swallow?", "eval_mode": True})
     done = _done(events)
     assert done["input_lang"] == "en"
     assert done["input_ambiguous"] is True
@@ -80,7 +80,7 @@ def test_auto_detect_latin_is_flagged_ambiguous(client, monkeypatch):
 
 def test_legacy_lang_field_still_works(client, monkeypatch):
     _force_dataset_gold(monkeypatch)
-    _, events = _chat(client, {"lang": "hi", "question": "ताजमहल कहां स्थित है?"})
+    _, events = _chat(client, {"lang": "hi", "question": "ताजमहल कहां स्थित है?", "eval_mode": True})
     done = _done(events)
     assert done["input_lang"] == "hi"
 
@@ -149,7 +149,7 @@ def test_romanized_input_style_auto_detected(client, monkeypatch, lang):
     language is treated as romanized (never as English)."""
     _force_dataset_gold(monkeypatch)
     e = _romanized_grounded_question(lang)
-    _, events = _chat(client, {"input_lang": lang, "input_style": "auto", "question": e["romanized_question"]})
+    _, events = _chat(client, {"input_lang": lang, "input_style": "auto", "question": e["romanized_question"], "eval_mode": True})
     done = _done(events)
     assert done["input_style"] == "romanized"
 

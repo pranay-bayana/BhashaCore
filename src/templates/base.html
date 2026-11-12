@@ -1,163 +1,301 @@
 <!doctype html>
-<html lang="{{ get_interface_lang() }}">
+<html lang="{{ get_interface_lang() }}" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{% block title %}{{ t('brand') }}{% endblock %} — {{ t('brand') }}</title>
+
+    <!-- Google Fonts: Inter & Noto Sans Indic Fallbacks -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Devanagari:wght@400;600;700&family=Noto+Sans+Kannada:wght@400;600;700&family=Noto+Sans+Malayalam:wght@400;600;700&family=Noto+Sans+Tamil:wght@400;600;700&family=Noto+Sans+Telugu:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <!-- Design System CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/design-system.css') }}">
+    <script>
+      window.__BHASHACORE_CATALOGS__ = window.__BHASHACORE_CATALOGS__ || {};
+      window.__BHASHACORE_CATALOGS__['{{ get_interface_lang() }}'] = {{ get_translations(get_interface_lang()) | tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='js/app-shell.js') }}"></script>
     <style>
-        :root {
-            --primary: #1a365d;
-            --primary-light: #2d5a8e;
-            --accent: #e65100;
-            --bg: #f0f4f8;
-            --card: #ffffff;
-            --text: #1a365d;
-            --muted: #5a7a9d;
-            --border: #d7e0e9;
-            --ok: #1e7e34;
-            --warn: #b26a00;
-            --bad: #b23a3a;
+      /* Ambient Background Lighting Layer for Glassmorphism */
+      .glass-ambient-layer {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 0;
+        overflow: hidden;
+      }
+      .ambient-beam {
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 3px;
+        height: 620px;
+        background: linear-gradient(180deg, rgba(183, 255, 114, 0.6) 0%, rgba(183, 255, 114, 0.15) 50%, transparent 80%);
+        box-shadow: 0 0 60px 24px rgba(183, 255, 114, 0.25);
+        filter: blur(1px);
+      }
+      .ambient-orb {
+        position: absolute;
+        border-radius: 50%;
+        pointer-events: none;
+      }
+      .ambient-orb.orb-top-right {
+        top: -80px;
+        right: 5%;
+        width: 580px;
+        height: 480px;
+        background: radial-gradient(circle at center, rgba(183, 255, 114, 0.15) 0%, rgba(57, 255, 136, 0.05) 45%, transparent 70%);
+        filter: blur(85px);
+      }
+      .ambient-orb.orb-bottom-left {
+        bottom: -100px;
+        left: 3%;
+        width: 540px;
+        height: 500px;
+        background: radial-gradient(circle at center, rgba(34, 211, 238, 0.10) 0%, rgba(183, 255, 114, 0.04) 50%, transparent 70%);
+        filter: blur(90px);
+      }
+      .ambient-orb.orb-center-ambient {
+        top: 250px;
+        left: 35%;
+        width: 500px;
+        height: 350px;
+        background: radial-gradient(circle at center, rgba(183, 255, 114, 0.07) 0%, transparent 70%);
+        filter: blur(75px);
+      }
+      [data-theme="light"] .ambient-beam {
+        background: linear-gradient(180deg, rgba(255, 97, 21, 0.5) 0%, rgba(255, 97, 21, 0.1) 50%, transparent 80%);
+        box-shadow: 0 0 50px 20px rgba(255, 97, 21, 0.18);
+      }
+      [data-theme="light"] .ambient-orb.orb-top-right {
+        background: radial-gradient(circle at center, rgba(255, 97, 21, 0.12) 0%, transparent 65%);
+      }
+      [data-theme="light"] .ambient-orb.orb-bottom-left {
+        background: radial-gradient(circle at center, rgba(2, 132, 199, 0.08) 0%, transparent 65%);
+      }
+
+      /* Mobile Drawer Overlay */
+      .mobile-drawer-backdrop {
+        position: fixed; inset: 0; background: rgba(5, 5, 5, 0.75); backdrop-filter: blur(6px);
+        z-index: 199; opacity: 0; pointer-events: none; transition: opacity 0.25s ease;
+      }
+      .mobile-drawer {
+        position: fixed; top: 0; left: 0; bottom: 0; width: 280px; max-width: 85vw;
+        background: #080808; border-right: 1px solid rgba(255, 255, 255, 0.12);
+        z-index: 200; transform: translateX(-100%); display: none;
+        flex-direction: column; padding: 1.5rem 1.25rem; gap: 1.25rem; box-shadow: var(--shadow-lg);
+      }
+      .mobile-drawer.open { transform: translateX(0); display: flex; }
+      .mobile-drawer.open ~ .mobile-drawer-backdrop { opacity: 1; pointer-events: auto; }
+      .drawer-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-bottom: 0.85rem; }
+      .drawer-nav { display: flex; flex-direction: column; gap: 0.4rem; }
+      .drawer-nav a { padding: 0.65rem 0.85rem; border-radius: var(--radius-sm); font-size: 0.92rem; font-weight: 500; color: #FFFFFF; text-decoration: none; display: flex; align-items: center; gap: 0.75rem; }
+      .drawer-nav a:hover, .drawer-nav a[aria-current="page"] { background: rgba(183, 255, 114, 0.12); color: #B7FF72; }
+      .drawer-footer { margin-top: auto; border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 1rem; display: flex; flex-direction: column; gap: 0.75rem; }
+
+      /* Top Horizontal Navigation */
+      .top-horizontal-nav {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-left: 1.25rem;
+      }
+      .top-nav-link {
+        font-size: 0.88rem;
+        font-weight: 500;
+        color: #A1A1AA;
+        text-decoration: none;
+        padding: 5px 12px;
+        border-radius: 9999px;
+        transition: all 0.15s ease;
+      }
+      .top-nav-link:hover, .top-nav-link.active {
+        color: #B7FF72;
+        background: rgba(183, 255, 114, 0.1);
+      }
+      [data-theme="light"] .top-nav-link:hover, [data-theme="light"] .top-nav-link.active {
+        color: #FF6115;
+        background: rgba(255, 97, 21, 0.1);
+      }
+      @media (max-width: 768px) {
+        .top-horizontal-nav {
+          display: none;
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
-            background: var(--bg); color: var(--text); line-height: 1.55;
-        }
-        a { color: var(--primary-light); }
-        header {
-            background: var(--primary); color: #fff; position: sticky; top: 0; z-index: 50;
-            box-shadow: 0 2px 8px rgba(0,0,0,.15);
-        }
-        .header-inner {
-            max-width: 1100px; margin: 0 auto; padding: 12px 16px;
-            display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
-        }
-        .brand { font-weight: 700; font-size: 1.15rem; color: #fff; text-decoration: none; }
-        .brand small { display: block; font-weight: 400; font-size: .7rem; opacity: .8; }
-        nav.main-nav { margin-left: auto; display: flex; flex-wrap: wrap; gap: 4px; }
-        nav.main-nav a {
-            color: #dbe6f3; text-decoration: none; font-size: .85rem;
-            padding: 7px 11px; border-radius: 8px;
-        }
-        nav.main-nav a:hover { background: rgba(255,255,255,.12); color: #fff; }
-        nav.main-nav a[aria-current="page"] { background: var(--accent); color: #fff; font-weight: 600; }
-        .interface-lang-select {
-            margin-left: 16px;
-            padding: 6px 10px;
-            border-radius: 8px;
-            border: 1px solid rgba(255,255,255,.3);
-            background: rgba(255,255,255,.1);
-            color: #fff;
-            font-size: .85rem;
-            cursor: pointer;
-        }
-        .interface-lang-select option { background: var(--primary); color: #fff; }
-        main { max-width: 1100px; margin: 24px auto 48px; padding: 0 16px; }
-        h1 { font-size: 1.4rem; margin-bottom: 6px; }
-        .subtitle { color: var(--muted); font-size: .9rem; margin-bottom: 18px; }
-        .card {
-            background: var(--card); border: 1px solid var(--border); border-radius: 12px;
-            padding: 18px; margin-bottom: 16px; overflow-x: auto;
-        }
-        table { border-collapse: collapse; width: 100%; font-size: .85rem; }
-        th, td { border-bottom: 1px solid var(--border); padding: 8px 10px; text-align: left; }
-        th { background: #eef3f8; font-weight: 600; white-space: nowrap; }
-        .badge {
-            display: inline-block; padding: 2px 9px; border-radius: 999px;
-            font-size: .72rem; font-weight: 600;
-        }
-        .badge.ok { background: #e3f4e8; color: var(--ok); }
-        .badge.warn { background: #fdf1df; color: var(--warn); }
-        .badge.bad { background: #fbe7e7; color: var(--bad); }
-        .status-loading { color: var(--muted); font-style: italic; padding: 18px; }
-        .status-error { color: var(--bad); padding: 18px; }
-        .notice {
-            background: #fdf6ec; border: 1px solid #f0dcb8; color: #7a5300;
-            padding: 10px 14px; border-radius: 10px; font-size: .85rem; margin-bottom: 16px;
-        }
-        .hero { padding: 72px 0 42px; max-width: 760px; }
-        .hero h1 { font-size: clamp(2.25rem, 6vw, 4.5rem); line-height: 1.02; letter-spacing: -.045em; margin: 10px 0 18px; }
-        .hero p { font-size: 1.08rem; color: var(--muted); max-width: 680px; }
-        .eyebrow { color: var(--accent); font-size: .78rem; font-weight: 750; text-transform: uppercase; letter-spacing: .08em; }
-        .hero-actions { display: flex; gap: 10px; margin-top: 24px; }
-        .feature-grid { display:grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
-        .feature-grid h2, .auth-card h1 { font-size: 1.15rem; margin-bottom: 8px; }
-        .feature-grid p { color: var(--muted); font-size:.9rem; }
-        .auth-card { max-width: 460px; margin: 48px auto; }
-        .auth-form { display:grid; gap: 13px; margin-top:18px; }
-        .auth-form label { display:grid; gap:5px; font-size:.85rem; font-weight:650; }
-        .auth-form input { width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:9px; font:inherit; }
-        .password-wrap { position:relative; }.password-wrap input { padding-right:64px; }.text-btn { position:absolute; right:7px; top:7px; border:0; background:transparent; color:var(--primary); cursor:pointer; font-weight:650; }
-        .check { grid-template-columns:auto 1fr; align-items:start; font-weight:400 !important; }.check input { width:auto; margin-top:3px; }
-        footer { max-width: 1100px; margin: 0 auto; padding: 18px 16px; color: var(--muted); font-size: .78rem; }
-        @media (max-width: 640px) {
-            .header-inner { justify-content: center; }
-            nav.main-nav { margin-left: 0; justify-content: center; }
-            .interface-lang-select { margin-left: 0; margin-top: 8px; width: 100%; text-align: center; }
-            main { margin-top: 16px; }
-            .feature-grid { grid-template-columns:1fr; }.hero { padding-top:42px; }
-        }
-        @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+      }
     </style>
     {% block head %}{% endblock %}
 </head>
 <body>
-    <header>
-        <div class="header-inner">
-            <a class="brand" href="/">{{ t('brand') }}<small>{{ t('tagline') }}</small></a>
-            <nav class="main-nav" aria-label="{{ t('nav_chat') }}">
-                <a href="/" {% block nav_chat %}{% endblock %}>{{ t('nav_chat') }}</a>
-                <a href="/dashboard" {% block nav_dashboard %}{% endblock %}>{{ t('nav_dashboard') }}</a>
-                <a href="/language-comparison" {% block nav_comparison %}{% endblock %}>{{ t('nav_comparison') }}</a>
-                <a href="/failure-analysis" {% block nav_failures %}{% endblock %}>{{ t('nav_failures') }}</a>
-                <a href="/about" {% block nav_about %}{% endblock %}>{{ t('nav_about') }}</a>
-            </nav>
-            {% if current_user() %}
-            <a class="btn secondary" style="padding:6px 10px" href="/settings">{{ current_user().name }}</a>
-            <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn secondary" style="padding:6px 10px">{{ t('auth_logout') }}</button></form>
-            {% else %}
-            <a class="btn secondary" style="padding:6px 10px" href="/signin">{{ t('auth_sign_in') }}</a>
-            {% endif %}
-            <select class="interface-lang-select" id="interfaceLangSelect" aria-label="{{ t('interface_language') }}" onchange="setInterfaceLang(this.value)">
-                {% for code, name in get_available_languages().items() %}
-                <option value="{{ code }}" {% if code == get_interface_lang() %}selected{% endif %}>{{ name }}</option>
-                {% endfor %}
-            </select>
+    <!-- FIXED AMBIENT LIGHTING MESH FOR REAL GLASS BACKGROUND INTERACTION -->
+    <div class="glass-ambient-layer" aria-hidden="true">
+        <div class="ambient-beam"></div>
+        <div class="ambient-orb orb-top-right"></div>
+        <div class="ambient-orb orb-bottom-left"></div>
+        <div class="ambient-orb orb-center-ambient"></div>
+    </div>
+
+    <div class="app-layout-shell">
+        <!-- TOP FULL-WIDTH GLASS HEADER -->
+        <header class="app-top-header" id="appTopHeader">
+            <div class="top-header-left">
+                <!-- BhashaCore Brand Emblem & Title -->
+                <a class="header-brand-wrapper" href="/" title="{{ t('brand') }}">
+                    <div class="brand-lime-emblem">B</div>
+                    <div class="brand-text-block">
+                        <span class="brand-title" data-i18n="brand">{{ t('brand') }}</span>
+                        <span class="brand-subtitle" data-i18n="tagline">{{ t('tagline') }}</span>
+                    </div>
+                </a>
+
+                <!-- Top Horizontal Navigation (Home, Chat, Research, About) -->
+                <nav class="top-horizontal-nav main-nav" aria-label="Main Navigation">
+                    <a href="/" class="top-nav-link {% block top_nav_home %}{% endblock %}" data-i18n="nav_home">{{ t('nav_home') }}</a>
+                    <a href="/chat" class="top-nav-link {% block top_nav_chat %}{% endblock %}" data-i18n="nav_chat">{{ t('nav_chat') }}</a>
+
+                    <!-- Research Dropdown Link -->
+                    <div class="top-nav-dropdown">
+                        <a href="/dashboard" class="top-nav-link {% block top_nav_research %}{% endblock %}" data-i18n="nav_research_group">
+                            <span>{{ t('nav_research_group') }}</span>
+                            <svg class="chevron-down" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </a>
+                        <div class="top-nav-dropdown-menu">
+                            <a href="/dashboard" class="dropdown-item {% block nav_dashboard_class %}{% endblock %}" data-i18n="nav_dashboard">{{ t('nav_dashboard') }}</a>
+                            <a href="/language-comparison" class="dropdown-item {% block nav_comparison_class %}{% endblock %}" data-i18n="nav_comparison">{{ t('nav_comparison') }}</a>
+                            <a href="/failure-analysis" class="dropdown-item {% block nav_failures_class %}{% endblock %}" data-i18n="nav_failures">{{ t('nav_failures') }}</a>
+                        </div>
+                    </div>
+
+                    <a href="/about" class="top-nav-link {% block top_nav_about %}{% endblock %}" data-i18n="nav_about">{{ t('nav_about') }}</a>
+                </nav>
+            </div>
+
+            <!-- Floating Header Right Cluster -->
+            <div class="top-header-right-cluster">
+                <!-- Interface Language Pill Dropdown -->
+                <div class="interface-pill-wrapper" title="{{ t('interface_language') }}" data-i18n-title="interface_language">
+                    <svg class="globe-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                    <span class="interface-pill-text">{{ t('interface_label') }}: {{ get_available_languages()[get_interface_lang()] }}</span>
+                    <svg class="chevron-down" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+
+                    <!-- Real Select Dropdown for interaction and tests -->
+                    <select class="interface-lang-select-hidden interface-lang-select" id="interfaceLangSelect" aria-label="{{ t('interface_language') }}" data-i18n-aria="interface_language" onchange="setInterfaceLang(this.value)">
+                        {% for code, name in get_available_languages().items() %}
+                        <option value="{{ code }}" {% if code == get_interface_lang() %}selected{% endif %}>
+                            {{ name }} ({{ code|upper }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Theme Toggle Circle Button -->
+                <button type="button" class="top-circle-btn" id="themeToggleBtn" onclick="toggleTheme()" aria-label="{{ t('theme_toggle') }}" title="{{ t('theme_toggle') }}" data-i18n-aria="theme_toggle" data-i18n-title="theme_toggle">
+                    <svg class="theme-icon sun-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+                </button>
+
+                <!-- Notifications Circle Button with Green Dot -->
+                <button type="button" class="top-circle-btn notification-btn" aria-label="{{ t('notifications_label') }}" title="{{ t('notifications_label') }}" data-i18n-aria="notifications_label" data-i18n-title="notifications_label">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+                    <span class="notification-dot"></span>
+                </button>
+
+                <!-- Profile Avatar Circle -->
+                {% if current_user() %}
+                <a href="/settings" class="top-avatar-circle" title="{{ current_user().name }}">
+                    {{ current_user().name[0]|upper }}
+                </a>
+                {% else %}
+                <a href="/signin" class="top-avatar-circle" title="{{ t('auth_sign_in') }}" data-i18n-title="auth_sign_in">
+                    P
+                </a>
+                {% endif %}
+
+                <!-- Mobile Menu Button -->
+                <button type="button" class="mobile-menu-btn" onclick="toggleMobileNav()" aria-label="{{ t('toggle_navigation') }}" data-i18n-aria="toggle_navigation">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Dynamic Page Content Area (Full Width) -->
+        <main class="app-main-canvas" id="appMainCanvas">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    <!-- Mobile Navigation Drawer -->
+    <div id="mobileNavDrawer" class="mobile-drawer">
+        <div class="drawer-header">
+            <div style="font-weight:700; font-size:1.1rem; color:#FFFFFF; display:flex; align-items:center; gap:8px;">
+                <div class="brand-lime-emblem" style="width:28px; height:28px; font-size:0.9rem;">B</div>
+                <span data-i18n="brand">{{ t('brand') }}</span>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="toggleMobileNav()" aria-label="{{ t('close_menu') }}" data-i18n-aria="close_menu">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
         </div>
-    </header>
-    <main>
-        {% block content %}{% endblock %}
-    </main>
-    <footer>
-        {{ t('footer') | safe }}
-    </footer>
+
+        <nav class="drawer-nav">
+            <a href="/">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+                <span data-i18n="nav_home">{{ t('nav_home') }}</span>
+            </a>
+            <a href="/chat" {% block nav_chat_mobile %}{% endblock %}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                <span data-i18n="nav_chat">{{ t('nav_chat') }}</span>
+            </a>
+            <a href="/dashboard">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
+                <span data-i18n="nav_dashboard">{{ t('nav_dashboard') }}</span>
+            </a>
+            <a href="/language-comparison">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+                <span data-i18n="nav_comparison">{{ t('nav_comparison') }}</span>
+            </a>
+            <a href="/failure-analysis">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                <span data-i18n="nav_failures">{{ t('nav_failures') }}</span>
+            </a>
+            <a href="/about">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                <span data-i18n="nav_about">{{ t('nav_about') }}</span>
+            </a>
+            {% if current_user() %}
+            <a href="/settings">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                <span data-i18n="auth_settings">{{ t('auth_settings') }}</span>
+            </a>
+            {% endif %}
+        </nav>
+
+        <div class="drawer-footer">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:0.85rem; color:#A1A1AA;" data-i18n="interface_language">{{ t('interface_language') }}</span>
+                <select class="select-input btn-sm interface-lang-select" onchange="setInterfaceLang(this.value)">
+                    {% for code, name in get_available_languages().items() %}
+                    <option value="{{ code }}" {% if code == get_interface_lang() %}selected{% endif %}>{{ name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% if current_user() %}
+            <form method="post" action="/logout">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-secondary" style="width:100%;" data-i18n="auth_logout">{{ t('auth_logout') }}</button>
+            </form>
+            {% else %}
+            <a class="btn btn-primary" href="/signup" style="width:100%;" data-i18n="auth_sign_up">{{ t('auth_sign_up') }}</a>
+            <a class="btn btn-secondary" href="/signin" style="width:100%;" data-i18n="auth_sign_in">{{ t('auth_sign_in') }}</a>
+            {% endif %}
+        </div>
+    </div>
+    <div class="mobile-drawer-backdrop" onclick="toggleMobileNav()"></div>
+
+    <div id="toastContainer" class="toast-container"></div>
+
     {% block scripts %}
-    <script>
-    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
-    const nativeFetch = window.fetch.bind(window);
-    window.fetch = (input, init = {}) => {
-        const method = (init.method || 'GET').toUpperCase();
-        if (csrfToken && !['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(method)) {
-            const headers = new Headers(init.headers || {});
-            headers.set('X-CSRFToken', csrfToken);
-            init = { ...init, headers };
-        }
-        return nativeFetch(input, init);
-    };
-    // Interface language switching
-    function setInterfaceLang(lang) {
-        fetch('/api/set-interface-lang', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ lang: lang })
-        }).then(() => {
-            window.location.reload();
-        }).catch(() => {
-            window.location.reload();
-        });
-    }
-    </script>
     {% endblock %}
 </body>
 </html>

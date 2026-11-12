@@ -2,37 +2,186 @@
 {% block title %}{{ t('nav_failures') }}{% endblock %}
 {% block nav_failures %}aria-current="page"{% endblock %}
 
-{% block content %}
-<h1>{{ t('nav_failures') }}</h1>
-<p class="subtitle">{{ t('failure_subtitle', generator=generator) }}</p>
+{% block head %}
+<style>
+  .filters-card {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
+    backdrop-filter: blur(24px) saturate(160%);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.2), var(--shadow-glass);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+  .filter-form-row {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .filter-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .filter-group label {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+  .failure-item-card {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.02) 100%);
+    backdrop-filter: blur(20px) saturate(150%);
+    -webkit-backdrop-filter: blur(20px) saturate(150%);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.15), var(--shadow-sm);
+    border-radius: var(--radius-lg);
+    padding: 1.4rem;
+    margin-bottom: 1rem;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .failure-item-card:hover {
+    border-color: rgba(255, 255, 255, 0.22);
+    transform: translateY(-2px);
+    box-shadow: inset 0 1px 1.5px rgba(255, 255, 255, 0.25), var(--shadow-md);
+  }
+  .failure-meta-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    border-bottom: 1px solid var(--border-subtle);
+    padding-bottom: 8px;
+    margin-bottom: 12px;
+  }
+  .qa-block {
+    margin-top: 8px;
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+  .qa-label {
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+  .gloss-text {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+  .issues-row {
+    margin-top: 12px;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .research-hub-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-subtle);
+    overflow-x: auto;
+  }
+  .research-tab-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: var(--radius-full);
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.18);
+    text-decoration: none;
+    transition: all var(--transition-fast);
+    white-space: nowrap;
+  }
+  .research-tab-pill:hover {
+    color: var(--text-primary);
+    border-color: rgba(255, 255, 255, 0.24);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.04) 100%);
+    transform: translateY(-1px);
+  }
+  .research-tab-pill.active {
+    background: linear-gradient(135deg, rgba(183, 255, 114, 0.18) 0%, rgba(183, 255, 114, 0.06) 100%);
+    border-color: rgba(183, 255, 114, 0.45);
+    color: #B7FF72;
+    box-shadow: inset 0 1px 1.5px rgba(255, 255, 255, 0.35), 0 0 16px rgba(183, 255, 114, 0.22);
+  }
+</style>
+{% endblock %}
 
-<div class="card">
-    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-        <label style="font-size:.8rem" for="langFilter">{{ t('failure_language') }}</label>
-        <select id="langFilter" aria-label="{{ t('failure_language') }}">
-            <option value="">{{ t('failure_all_languages') }}</option>
-            <option value="en">{{ t('session_answer_lang_en') }}</option>
-            <option value="hi">{{ t('session_answer_lang_hi') }}</option>
-            <option value="ta">{{ t('session_answer_lang_ta') }}</option>
-            <option value="te">{{ t('session_answer_lang_te') }}</option>
-            <option value="kn">{{ t('session_answer_lang_kn') }}</option>
-            <option value="ml">{{ t('session_answer_lang_ml') }}</option>
-        </select>
-        <label style="font-size:.8rem" for="modeFilter">{{ t('failure_mode') }}</label>
-        <select id="modeFilter" aria-label="{{ t('failure_mode') }}">
-            <option value="">{{ t('failure_all_modes') }}</option>
-            <option value="closed_book">{{ t('comparison_closed_book') }}</option>
-            <option value="gold_context">{{ t('comparison_gold_context') }}</option>
-            <option value="rag">{{ t('comparison_rag') }}</option>
-            <option value="rag_translit">{{ t('comparison_rag_translit') }}</option>
-        </select>
-        <button class="btn" onclick="loadFailures()">{{ t('failure_apply_filters') }}</button>
+{% block content %}
+<div class="research-content-container">
+<div class="research-hub-tabs" role="tablist" aria-label="Research Navigation">
+  <a href="/dashboard" class="research-tab-pill" role="tab" aria-selected="false">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
+    <span>{{ t('nav_dashboard') }}</span>
+  </a>
+  <a href="/language-comparison" class="research-tab-pill" role="tab" aria-selected="false">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+    <span>{{ t('nav_comparison') }}</span>
+  </a>
+  <a href="/failure-analysis" class="research-tab-pill active" role="tab" aria-selected="true">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+    <span>{{ t('nav_failures') }}</span>
+  </a>
+</div>
+
+<div style="margin-bottom:2rem;">
+  <span class="eyebrow" data-i18n="failure_eyebrow">{{ t('failure_eyebrow') }}</span>
+  <h1 data-i18n="nav_failures">{{ t('nav_failures') }}</h1>
+  <p class="subtitle">{{ t('failure_subtitle', generator=generator) }}</p>
+</div>
+
+<!-- Filters Bar -->
+<div class="filters-card">
+  <div class="filter-form-row">
+    <div class="filter-group">
+      <label for="langFilter">{{ t('failure_language') }}:</label>
+      <select id="langFilter" class="select-input" aria-label="{{ t('failure_language') }}">
+        <option value="">{{ t('failure_all_languages') }}</option>
+        <option value="en">{{ t('session_answer_lang_en') }}</option>
+        <option value="hi">{{ t('session_answer_lang_hi') }}</option>
+        <option value="ta">{{ t('session_answer_lang_ta') }}</option>
+        <option value="te">{{ t('session_answer_lang_te') }}</option>
+        <option value="kn">{{ t('session_answer_lang_kn') }}</option>
+        <option value="ml">{{ t('session_answer_lang_ml') }}</option>
+      </select>
     </div>
+
+    <div class="filter-group">
+      <label for="modeFilter">{{ t('failure_mode') }}:</label>
+      <select id="modeFilter" class="select-input" aria-label="{{ t('failure_mode') }}">
+        <option value="">{{ t('failure_all_modes') }}</option>
+        <option value="closed_book">{{ t('comparison_closed_book') }}</option>
+        <option value="gold_context">{{ t('comparison_gold_context') }}</option>
+        <option value="rag">{{ t('comparison_rag') }}</option>
+        <option value="rag_translit">{{ t('comparison_rag_translit') }}</option>
+      </select>
+    </div>
+
+    <button type="button" class="btn btn-primary btn-sm" onclick="loadFailures()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+      {{ t('failure_apply_filters') }}
+    </button>
+  </div>
 </div>
 
 <div id="status" class="status-loading" role="status">{{ t('failure_loading') }}</div>
 <div id="results"></div>
+</div>
+{% endblock %}
 
+{% block scripts %}
+{{ super() }}
 <script>
 function esc(s) {
     return (s || '').replace(/[&<>"']/g, c => ({'&':'&','<':'<','>':'>','"':'"',"'":'&#39;'}[c]));
@@ -41,10 +190,10 @@ function esc(s) {
 function issueBadge(issues, retrievedHit) {
     let html = '';
     (issues || []).forEach(i => {
-        html += `<span class="badge bad" style="margin-right:4px">${esc(i)}</span>`;
+        html += `<span class="badge badge-bad">${esc(i)}</span>`;
     });
-    if (retrievedHit === false) html += '<span class="badge warn">{{ t('failure_retrieval_miss') }}</span>';
-    if (!html) html = '<span class="badge ok">{{ t('failure_no_tags') }}</span>';
+    if (retrievedHit === false) html += '<span class="badge badge-warn">{{ t('failure_retrieval_miss') }}</span>';
+    if (!html) html = '<span class="badge badge-ok">{{ t('failure_no_tags') }}</span>';
     return html;
 }
 
@@ -70,27 +219,39 @@ function loadFailures() {
     }).then(data => {
         statusEl.style.display = 'none';
         if (!data.failures.length) {
-            resultsEl.innerHTML = '<div class="card"><div class="empty-state">{{ t('failure_no_matches') }}</div></div>';
+            resultsEl.innerHTML = '<div class="card" style="text-align:center; padding:3rem;"><div class="subtitle">{{ t('failure_no_matches') }}</div></div>';
             return;
         }
         const summary = document.createElement('div');
         summary.className = 'card';
-        summary.innerHTML = `<strong>${data.failures.length}</strong> {{ t('failure_of') }} <strong>${data.total_matching}</strong> {{ t('failure_matching_failures') }} ({{ t('failure_sorted_by_lowest') }})`;
+        summary.style.padding = '0.85rem 1.25rem';
+        summary.innerHTML = `<span style="font-size:0.88rem; color:var(--text-secondary);">{{ t('failure_showing') }} <strong>${data.failures.length}</strong> {{ t('failure_of') }} <strong>${data.total_matching}</strong> {{ t('failure_matching_failures') }} ({{ t('failure_sorted_by_lowest') }})</span>`;
         resultsEl.appendChild(summary);
 
         data.failures.forEach(f => {
             const card = document.createElement('div');
-            card.className = 'card';
+            card.className = 'failure-item-card card';
+
+            const scoreClass = (f.correctness <= 2) ? 'badge-bad' : 'badge-warn';
             card.innerHTML = `
-                <div style="font-size:.72rem;color:var(--muted)">
-                    ${String(f.lang).toUpperCase()} · ${esc(f.mode)} · qid ${esc(String(f.qid))} ·
-                    correctness <strong>${f.correctness}/5</strong>${f.faithfulness !== null && f.faithfulness !== undefined ? ' · faithfulness ' + f.faithfulness + '/5' : ''}
+                <div class="failure-meta-header">
+                    <span>${String(f.lang).toUpperCase()} · ${esc(f.mode)} · QID: ${esc(String(f.qid))}</span>
+                    <div style="display:flex; gap:8px;">
+                      <span class="badge ${scoreClass}">{{ t('failure_correctness') }}: ${f.correctness}/5</span>
+                      ${f.faithfulness !== null && f.faithfulness !== undefined ? `<span class="badge badge-muted">{{ t('failure_faithfulness') }}: ${f.faithfulness}/5</span>` : ''}
+                    </div>
                 </div>
-                <div style="margin-top:8px"><strong>{{ t('failure_question') }}:</strong> ${esc(f.question || '(not available)')}</div>
-                ${f.gloss_question ? `<div style="font-size:.75rem;color:var(--muted)">{{ t('failure_gloss') }}: ${esc(f.gloss_question)}</div>` : ''}
-                <div style="margin-top:6px"><strong>{{ t('failure_bot_answer') }}:</strong> ${esc(f.answer || '')}</div>
-                ${f.gloss_answer ? `<div style="font-size:.75rem;color:var(--muted)">{{ t('failure_gloss') }}: ${esc(f.gloss_answer)}</div>` : ''}
-                <div style="margin-top:8px">${issueBadge(f.issues, f.retrieved_hit)}</div>`;
+                <div class="qa-block">
+                    <span class="qa-label">{{ t('failure_question') }}:</span>
+                    <span style="color:var(--text-primary);">${esc(f.question || '(not available)')}</span>
+                </div>
+                ${f.gloss_question ? `<div class="gloss-text"><strong>{{ t('failure_gloss') }}:</strong> ${esc(f.gloss_question)}</div>` : ''}
+                <div class="qa-block" style="margin-top:10px;">
+                    <span class="qa-label">{{ t('failure_bot_answer') }}:</span>
+                    <span style="color:var(--text-secondary);">${esc(f.answer || '(empty answer)')}</span>
+                </div>
+                ${f.gloss_answer ? `<div class="gloss-text"><strong>{{ t('failure_gloss') }}:</strong> ${esc(f.gloss_answer)}</div>` : ''}
+                <div class="issues-row">${issueBadge(f.issues, f.retrieved_hit)}</div>`;
             resultsEl.appendChild(card);
         });
     }).catch(err => {
@@ -100,8 +261,7 @@ function loadFailures() {
     });
 }
 
-document.getElementById('langFilter').addEventListener('change', loadFailures);
-document.getElementById('modeFilter').addEventListener('change', loadFailures);
+// Initial load
 loadFailures();
 </script>
 {% endblock %}

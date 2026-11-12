@@ -30,10 +30,12 @@ def client():
         yield c
 
 
-def _chat(client, lang, question, mode="rag", session="test-sess"):
+def _chat(client, lang, question, mode="rag", session="test-sess", **extra):
+    payload = {"session_id": session, "lang": lang, "question": question, "mode": mode}
+    payload.update(extra)
     resp = client.post(
         "/api/chat",
-        data=json.dumps({"session_id": session, "lang": lang, "question": question, "mode": mode}),
+        data=json.dumps(payload),
         content_type="application/json",
     )
     return resp
@@ -99,8 +101,12 @@ GROUNDED = {
 
 
 @pytest.mark.parametrize("lang", sorted(GROUNDED.keys()))
-def test_chat_grounded_all_languages(client, lang):
-    resp = _chat(client, lang, GROUNDED[lang], session=f"pytest-{lang}")
+def test_chat_grounded_all_languages(client, monkeypatch, lang):
+    # Corpus/citation regression, intentionally independent of live-provider
+    # availability.  Live six-language behavior is verified separately.
+    import src.app as app_mod
+    monkeypatch.setattr(app_mod, "HAS_LLM", False)
+    resp = _chat(client, lang, GROUNDED[lang], session=f"pytest-{lang}", eval_mode=True)
     assert resp.status_code == 200
     events = _parse_ndjson(resp.get_data(as_text=True))
     types = [e["type"] for e in events]
@@ -119,8 +125,10 @@ def test_chat_grounded_all_languages(client, lang):
         assert c["pid"] in pool_pids, f"{lang}: citation pid {c['pid']} not in pool"
 
 
-def test_chat_grounded_hindi_citation_integrity(client):
-    resp = _chat(client, "hi", "ताजमहल कहां स्थित है?", session="pytest-cite")
+def test_chat_grounded_hindi_citation_integrity(client, monkeypatch):
+    import src.app as app_mod
+    monkeypatch.setattr(app_mod, "HAS_LLM", False)
+    resp = _chat(client, "hi", "ताजमहल कहां स्थित है?", session="pytest-cite", eval_mode=True)
     done = next(e for e in _parse_ndjson(resp.get_data(as_text=True)) if e["type"] == "done")
     evals = {e["qid"]: e for e in load_jsonl(proc_path("eval_hi"))}
     match = next(e for e in evals.values() if e["question"] == "ताजमहल कहां स्थित है?")
@@ -131,7 +139,9 @@ def test_chat_grounded_hindi_citation_integrity(client):
         assert pool[c["pid"]]["text"].startswith(c["text"][:50]), "citation text must come from the real passage"
 
 
-def test_chat_insufficient_evidence(client):
+def test_chat_insufficient_evidence(client, monkeypatch):
+    import src.app as app_mod
+    monkeypatch.setattr(app_mod, "HAS_LLM", False)
     resp = _chat(client, "en", "What is the airspeed velocity of an unladen swallow in 1492?", session="pytest-unsup")
     assert resp.status_code == 200
     done = next(e for e in _parse_ndjson(resp.get_data(as_text=True)) if e["type"] == "done")
@@ -150,9 +160,8 @@ def test_chat_insufficient_evidence(client):
         assert "not used" in done["answer"] or "sufficient" in done["answer"]
 
 
-def test_chat_provider_failure_returns_provider_unavailable(client, monkeypatch):
-    """If the LLM provider fails in normal chat mode, status is provider_unavailable
-    — never dataset gold masquerading as model output."""
+def test_chat_provider_failure_is_a_classified_error_not_a_fake_answer(client, monkeypatch):
+    """A provider outage must not be streamed as a completed assistant reply."""
     import src.app as app_mod
 
     def boom(lang, question, passages):
@@ -160,12 +169,30 @@ def test_chat_provider_failure_returns_provider_unavailable(client, monkeypatch)
 
     monkeypatch.setattr(app_mod, "_llm_answer", boom)
     resp = _chat(client, "hi", "ताजमहल कहां स्थित है?", session="pytest-fallback")
-    assert resp.status_code == 200
-    done = next(e for e in _parse_ndjson(resp.get_data(as_text=True)) if e["type"] == "done")
-    assert done["status"] == "provider_unavailable"
-    assert "provider error" in done["model"]
-    # Dataset gold must NOT appear as model output
-    assert "आगरा" not in done["answer"]
+    assert resp.status_code == 503
+    assert resp.get_json() == {
+        "error": "generation_error",
+        "message": "The AI service is temporarily unavailable. Please retry once.",
+        "retryable": True,
+    }
+
+
+def test_chat_timeout_is_classified_and_does_not_stream_done(client, monkeypatch):
+    import src.app as app_mod
+
+    def timeout(*args, **kwargs):
+        raise app_mod.ProviderGenerationError(
+            code="provider_timeout", status_code=None, latency_ms=30000,
+        )
+
+    monkeypatch.setattr(app_mod, "_llm_answer", timeout)
+    resp = _chat(client, "hi", "ताजमहल कहां स्थित है?", session="pytest-timeout")
+    assert resp.status_code == 504
+    assert resp.get_json() == {
+        "error": "provider_timeout",
+        "message": "The AI response took too long. Please retry once.",
+        "retryable": True,
+    }
 
 
 def test_eval_mode_uses_dataset_gold_on_provider_failure():

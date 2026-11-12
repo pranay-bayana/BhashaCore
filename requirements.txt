@@ -6,10 +6,6 @@ httpx==0.28.1
 indic_transliteration==2.3.82
 pandas==3.1.0
 matplotlib==3.11.2
-sacrebleu==2.6.0
-tqdm==4.70.1
-numpy==2.5.4
-pyarrow==26.0.0
 flask>=3.0
 SQLAlchemy>=2.0
 Flask-SQLAlchemy>=3.1

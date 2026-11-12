@@ -2,42 +2,221 @@
 {% block title %}{{ t('nav_comparison') }}{% endblock %}
 {% block nav_comparison %}aria-current="page"{% endblock %}
 
-{% block content %}
-<h1>{{ t('nav_comparison') }}</h1>
-<p class="subtitle">{{ t('comparison_subtitle', generator=generator) }}</p>
+{% block head %}
+<style>
+  .comparison-header {
+    margin-bottom: 2rem;
+  }
+  .waterfall-card {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
+    backdrop-filter: blur(24px) saturate(160%);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
+    border: 1px solid rgba(255, 255, 255, 0.11);
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.2), var(--shadow-glass);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    margin-top: 1.5rem;
+  }
+  .lang-waterfall-item {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.12);
+    border-radius: var(--radius-md);
+    padding: 1.1rem;
+    margin-bottom: 1rem;
+  }
+  .bar-row {
+    margin-top: 8px;
+  }
+  .bar-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+    color: var(--text-secondary);
+  }
+  .bar-track {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-full);
+    height: 10px;
+    width: 100%;
+    overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%;
+    border-radius: var(--radius-full);
+    transition: width 0.4s ease-out;
+  }
+  .legend-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 1.25rem;
+    padding-bottom: 0.85rem;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+  }
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: var(--radius-xs);
+  }
+  .research-hub-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-subtle);
+    overflow-x: auto;
+  }
+  .research-tab-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: var(--radius-full);
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.18);
+    text-decoration: none;
+    transition: all var(--transition-fast);
+    white-space: nowrap;
+  }
+  .research-tab-pill:hover {
+    color: var(--text-primary);
+    border-color: rgba(255, 255, 255, 0.24);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.04) 100%);
+    transform: translateY(-1px);
+  }
+  .research-tab-pill.active {
+    background: linear-gradient(135deg, rgba(183, 255, 114, 0.18) 0%, rgba(183, 255, 114, 0.06) 100%);
+    border-color: rgba(183, 255, 114, 0.45);
+    color: #B7FF72;
+    box-shadow: inset 0 1px 1.5px rgba(255, 255, 255, 0.35), 0 0 16px rgba(183, 255, 114, 0.22);
+  }
+</style>
+{% endblock %}
 
-<div id="status" class="status-loading" role="status">{{ t('comparison_loading') }}</div>
-<div id="content" style="display:none">
-    <div class="notice">
-        {{ t('comparison_note') }}
-    </div>
-    <div class="card">
-        <div style="overflow-x:auto">
-            <table id="compTable">
-                <thead>
-                    <tr>
-                        <th>{{ t('comparison_language') }}</th><th>{{ t('comparison_closed_book') }}</th><th>{{ t('comparison_gold_context') }}</th><th>{{ t('comparison_rag') }}</th>
-                        <th>{{ t('comparison_rag_translit') }}</th><th>{{ t('comparison_recall_native') }}</th><th>{{ t('comparison_recall_romanized') }}</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
-        </div>
-    </div>
-    <div class="card">
-        <h2 style="font-size:1rem;margin-bottom:12px">{{ t('comparison_quality_waterfall') }}</h2>
-        <div id="bars"></div>
-    </div>
+{% block content %}
+<div class="research-content-container">
+<div class="research-hub-tabs" role="tablist" aria-label="Research Navigation">
+  <a href="/dashboard" class="research-tab-pill" role="tab" aria-selected="false">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
+    <span>{{ t('nav_dashboard') }}</span>
+  </a>
+  <a href="/language-comparison" class="research-tab-pill active" role="tab" aria-selected="true">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+    <span>{{ t('nav_comparison') }}</span>
+  </a>
+  <a href="/failure-analysis" class="research-tab-pill" role="tab" aria-selected="false">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+    <span>{{ t('nav_failures') }}</span>
+  </a>
 </div>
 
+<div class="comparison-header">
+  <span class="eyebrow" data-i18n="comparison_eyebrow">{{ t('comparison_eyebrow') }}</span>
+  <h1 data-i18n="nav_comparison">{{ t('nav_comparison') }}</h1>
+  <p class="subtitle">{{ t('comparison_subtitle', generator=generator) }}</p>
+
+  <div class="notice">
+    {{ t('comparison_note') }}
+  </div>
+</div>
+
+<div id="status" class="status-loading" role="status">
+  <div style="font-weight:600; margin-bottom:6px;" data-i18n="comparison_loading">{{ t('comparison_loading') }}</div>
+  <div style="font-size:0.84rem; color:var(--text-muted);" data-i18n="comparison_waterfall_desc">{{ t('comparison_waterfall_desc') }}</div>
+</div>
+
+<div id="content" style="display:none;">
+  <!-- Cross-Language Metrics Table -->
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title" data-i18n="comparison_matrix_title">{{ t('comparison_matrix_title') }}</h2>
+      <span class="badge badge-indigo" data-i18n="comparison_dataset_tag">{{ t('comparison_dataset_tag') }}</span>
+    </div>
+    <div class="table-wrapper">
+      <table id="compTable">
+        <thead>
+          <tr>
+            <th data-i18n="comparison_language">{{ t('comparison_language') }}</th>
+            <th data-i18n="comparison_closed_book">{{ t('comparison_closed_book') }}</th>
+            <th data-i18n="comparison_gold_context">{{ t('comparison_gold_context') }}</th>
+            <th data-i18n="comparison_rag">{{ t('comparison_rag') }}</th>
+            <th data-i18n="comparison_rag_translit">{{ t('comparison_rag_translit') }}</th>
+            <th data-i18n="comparison_recall_native">{{ t('comparison_recall_native') }}</th>
+            <th data-i18n="comparison_recall_romanized">{{ t('comparison_recall_romanized') }}</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Visual Waterfall / Quality Breakdown -->
+  <div class="waterfall-card">
+    <div class="card-header">
+      <div>
+        <h2 class="card-title" data-i18n="comparison_quality_waterfall">{{ t('comparison_quality_waterfall') }}</h2>
+        <p style="font-size:0.84rem; color:var(--text-secondary); margin-top:2px;" data-i18n="comparison_waterfall_desc">
+          {{ t('comparison_waterfall_desc') }}
+        </p>
+      </div>
+    </div>
+
+    <div class="legend-row">
+      <div class="legend-item">
+        <span class="legend-dot" style="background:#6366f1;"></span>
+        <span data-i18n="comparison_bar_gold_context">{{ t('comparison_bar_gold_context') }}</span>
+      </div>
+      <div class="legend-item">
+        <span class="legend-dot" style="background:#06b6d4;"></span>
+        <span data-i18n="comparison_bar_rag_native">{{ t('comparison_bar_rag_native') }}</span>
+      </div>
+      <div class="legend-item">
+        <span class="legend-dot" style="background:#f59e0b;"></span>
+        <span data-i18n="comparison_bar_rag_romanized">{{ t('comparison_bar_rag_romanized') }}</span>
+      </div>
+    </div>
+
+    <div id="bars"></div>
+  </div>
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
 <script>
 function bar(label, value, max, color) {
-    if (value === null || value === undefined) return `<div style="margin-bottom:8px"><div style="font-size:.78rem">${label}: <em style="color:var(--muted)">{{ t('comparison_no_data') }}</em></div></div>`;
+    if (value === null || value === undefined) {
+        return `<div class="bar-row">
+            <div class="bar-label"><span>${label}</span><em style="color:var(--text-muted)">{{ t('comparison_no_data') }}</em></div>
+        </div>`;
+    }
     const pct = Math.max(0, Math.min(100, (value / max) * 100));
-    return `<div style="margin-bottom:8px">
-        <div style="font-size:.78rem">${label}: <strong>${value.toFixed(2)}</strong></div>
-        <div style="background:#e6edf5;border-radius:6px;height:10px;max-width:420px">
-            <div style="background:${color};height:10px;border-radius:6px;width:${pct}%"></div>
+    return `<div class="bar-row">
+        <div class="bar-label">
+            <span>${label}</span>
+            <strong>${value.toFixed(2)} / 5.00</strong>
+        </div>
+        <div class="bar-track">
+            <div class="bar-fill" style="background:${color}; width:${pct}%;"></div>
         </div>
     </div>`;
 }
@@ -68,14 +247,17 @@ fetch('/api/comparison').then(r => {
         tbody.appendChild(tr);
 
         const wrap = document.createElement('div');
-        wrap.style.marginBottom = '18px';
-        wrap.innerHTML = `<div style="font-weight:700;font-size:.85rem;margin-bottom:6px">${l.lang.toUpperCase()} · ${l.name} (${l.script})</div>` +
-            bar('{{ t('comparison_bar_gold_context') }}', l.gold_context, 5, '#1a365d') +
-            bar('{{ t('comparison_bar_rag_native') }}', l.rag, 5, '#2d5a8e') +
-            bar('{{ t('comparison_bar_rag_romanized') }}', l.rag_translit, 5, '#e65100');
+        wrap.className = 'lang-waterfall-item';
+        wrap.innerHTML = `<div style="font-weight:700; font-size:0.95rem; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+            <span>${l.name} (${l.lang.toUpperCase()})</span>
+            <span class="badge badge-muted">${l.script}</span>
+        </div>` +
+        bar('{{ t('comparison_bar_gold_context') }}', l.gold_context, 5, '#6366f1') +
+        bar('{{ t('comparison_bar_rag_native') }}', l.rag, 5, '#06b6d4') +
+        bar('{{ t('comparison_bar_rag_romanized') }}', l.rag_translit, 5, '#f59e0b');
         barsEl.appendChild(wrap);
     });
-    if (tbody.children.length === 0) tbody.innerHTML = '<tr><td colspan="7">{{ t('comparison_no_data_available') }}</td></tr>';
+    if (tbody.children.length === 0) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">{{ t('comparison_no_data_available') }}</td></tr>';
 }).catch(err => {
     document.getElementById('status').className = 'status-error';
     document.getElementById('status').textContent = '{{ t('comparison_could_not_load') }}: ' + err.message;

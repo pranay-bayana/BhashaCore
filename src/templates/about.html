@@ -2,84 +2,186 @@
 {% block title %}{{ t('nav_about') }}{% endblock %}
 {% block nav_about %}aria-current="page"{% endblock %}
 
+{% block head %}
+<style>
+  .about-container {
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  .about-section-card {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
+    backdrop-filter: blur(24px) saturate(160%);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
+    border: 1px solid rgba(255, 255, 255, 0.11);
+    box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.20), var(--shadow-glass);
+    border-radius: var(--radius-lg);
+    padding: 2rem;
+    margin-bottom: 1.5rem;
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+  .about-section-card:hover {
+    border-color: rgba(255, 255, 255, 0.22);
+    box-shadow: inset 0 1px 1.5px rgba(255, 255, 255, 0.28), var(--shadow-glass-elevated);
+    transform: translateY(-2px);
+  }
+  .about-section-card h2 {
+    font-size: 1.25rem;
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .about-list {
+    margin: 1rem 0 0 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    font-size: 0.92rem;
+    color: var(--text-secondary);
+  }
+  .about-list strong {
+    color: var(--text-primary);
+  }
+  .code-block {
+    background: var(--bg-base);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    padding: 1.2rem;
+    font-family: var(--font-mono);
+    font-size: 0.84rem;
+    overflow-x: auto;
+    color: var(--text-primary);
+    line-height: 1.5;
+  }
+</style>
+{% endblock %}
+
 {% block content %}
-<h1>{{ t('about_title') }}</h1>
-<p class="subtitle">{{ t('about_subtitle') }}</p>
+<div class="about-container">
+  <div style="margin-bottom:2rem;">
+    <span class="eyebrow" data-i18n="about_eyebrow">{{ t('about_eyebrow') }}</span>
+    <h1 data-i18n="about_title">{{ t('about_title') }}</h1>
+    <p class="subtitle" data-i18n="about_subtitle">{{ t('about_subtitle') }}</p>
+  </div>
 
-<div class="card">
-    <h2 style="font-size:1rem;margin-bottom:8px">{{ t('about_what_is') }}</h2>
-    <p style="font-size:.9rem">
-        {{ t('about_what_is_desc', en='<strong>English</strong>', hi='<strong>हिन्दी</strong>', ta='<strong>தமிழ்</strong>', te='<strong>తెలుగు</strong>', kn='<strong>ಕನ್ನಡ</strong>', ml='<strong>മലയാളം</strong>') }}
+  <div class="about-section-card">
+    <h2>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+      {{ t('about_what_is') }}
+    </h2>
+    <p style="font-size:0.95rem; line-height:1.6;">
+      {{ t('about_what_is_desc', en='<strong>English</strong>', hi='<strong>हिन्दी</strong>', ta='<strong>தமிழ்</strong>', te='<strong>తెలుగు</strong>', kn='<strong>ಕನ್ನಡ</strong>', ml='<strong>മലയാളം</strong>') | safe }}
     </p>
-    <ul style="font-size:.88rem;margin:10px 0 0 20px">
-        <li><strong>{{ t('about_comprehension') }}</strong> — {{ t('about_comprehension_desc') }}</li>
-        <li><strong>{{ t('about_knowledge') }}</strong> — {{ t('about_knowledge_desc') }}</li>
-        <li><strong>{{ t('about_retrieval') }}</strong> — {{ t('about_retrieval_desc') }}</li>
-        <li><strong>{{ t('about_input_normalization') }}</strong> — {{ t('about_input_normalization_desc') }}</li>
+    <ul class="about-list">
+      <li><strong>{{ t('about_comprehension') }}</strong> — {{ t('about_comprehension_desc') }}</li>
+      <li><strong>{{ t('about_knowledge') }}</strong> — {{ t('about_knowledge_desc') }}</li>
+      <li><strong>{{ t('about_retrieval') }}</strong> — {{ t('about_retrieval_desc') }}</li>
+      <li><strong>{{ t('about_input_normalization') }}</strong> — {{ t('about_input_normalization_desc') }}</li>
     </ul>
-</div>
+  </div>
 
-<div class="card">
-    <h2 style="font-size:1rem;margin-bottom:8px">{{ t('about_data_models') }}</h2>
-    <ul style="font-size:.88rem;margin-left:20px">
-        <li>{{ t('about_qa_data') }}</li>
-        <li>{{ t('about_retrieval_pools') }}</li>
-        <li>{{ t('about_generator_evaluated') }}</li>
-        <li>{{ t('about_judge') }}</li>
+  <div class="about-section-card">
+    <h2>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-cyan)" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+      {{ t('about_data_models') }}
+    </h2>
+    <ul class="about-list" style="margin-left:1.25rem;">
+      <li>{{ t('about_qa_data') }}</li>
+      <li>{{ t('about_retrieval_pools') }}</li>
+      <li>{{ t('about_generator_evaluated') }}</li>
+      <li>{{ t('about_judge') }}</li>
     </ul>
-</div>
+  </div>
 
-<div class="card">
-    <h2 style="font-size:1rem;margin-bottom:8px">{{ t('about_metric_definitions') }}</h2>
-    <table>
-        <tr><th>{{ t('about_metric') }}</th><th>{{ t('about_definition') }}</th></tr>
-        <tr><td>{{ t('about_judge_correctness') }}</td><td>{{ t('about_judge_correctness_desc') }}</td></tr>
-        <tr><td>{{ t('about_faithfulness') }}</td><td>{{ t('about_faithfulness_desc') }}</td></tr>
-        <tr><td>{{ t('about_em_f1') }}</td><td>{{ t('about_em_f1_desc') }}</td></tr>
-        <tr><td>{{ t('about_script_purity') }}</td><td>{{ t('about_script_purity_desc') }}</td></tr>
-        <tr><td>{{ t('about_recall_mrr') }}</td><td>{{ t('about_recall_mrr_desc') }}</td></tr>
-    </table>
-</div>
+  <div class="about-section-card">
+    <h2>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+      {{ t('about_metric_definitions') }}
+    </h2>
+    <div class="table-wrapper" style="margin-top:1rem;">
+      <table>
+        <thead>
+          <tr>
+            <th>{{ t('about_metric') }}</th>
+            <th>{{ t('about_definition') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>{{ t('about_judge_correctness') }}</strong></td>
+            <td>{{ t('about_judge_correctness_desc') }}</td>
+          </tr>
+          <tr>
+            <td><strong>{{ t('about_faithfulness') }}</strong></td>
+            <td>{{ t('about_faithfulness_desc') }}</td>
+          </tr>
+          <tr>
+            <td><strong>{{ t('about_em_f1') }}</strong></td>
+            <td>{{ t('about_em_f1_desc') }}</td>
+          </tr>
+          <tr>
+            <td><strong>{{ t('about_script_purity') }}</strong></td>
+            <td>{{ t('about_script_purity_desc') }}</td>
+          </tr>
+          <tr>
+            <td><strong>{{ t('about_recall_mrr') }}</strong></td>
+            <td>{{ t('about_recall_mrr_desc') }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
 
-<div class="card">
-    <h2 style="font-size:1rem;margin-bottom:8px">{{ t('about_how_chat_works') }}</h2>
-    <p style="font-size:.88rem">
-        {{ t('about_chat_bm25') }}
+  <div class="about-section-card">
+    <h2>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-warning)" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+      {{ t('about_how_chat_works') }}
+    </h2>
+    <p style="font-size:0.92rem; line-height:1.6;">
+      {{ t('about_chat_bm25') }}
     </p>
-    <ul style="font-size:.88rem;margin:10px 0 0 20px">
-        <li>{{ t('about_chat_grounded') }}</li>
-        <li>{{ t('about_chat_refusal') }}</li>
-        <li>{{ t('about_chat_citations') }}</li>
+    <ul class="about-list">
+      <li>{{ t('about_chat_grounded') }}</li>
+      <li>{{ t('about_chat_refusal') }}</li>
+      <li>{{ t('about_chat_citations') }}</li>
     </ul>
     {% if not has_llm %}
-    <div class="notice" style="margin-top:12px">
-        <strong>{{ t('about_dataset_gold_mode') }}</strong> {{ t('about_dataset_gold_desc') }}
+    <div class="notice" style="margin-top:1.25rem;">
+      <strong>{{ t('about_dataset_gold_mode') }}</strong> {{ t('about_dataset_gold_desc') }}
     </div>
     {% endif %}
-</div>
+  </div>
 
-<div class="card">
-    <h2 style="font-size:1rem;margin-bottom:8px">{{ t('about_known_limitations') }}</h2>
-    <ul style="font-size:.88rem;margin-left:20px">
-        <li>{{ t('about_limit_independent_samples') }}</li>
-        <li>{{ t('about_limit_bm25') }}</li>
-        <li>{{ t('about_limit_romanized') }}</li>
-        <li>{{ t('about_limit_judge') }}</li>
-        <li>{{ t('about_limit_distractors') }}</li>
-        <li>{{ t('about_limit_not_guidance') }}</li>
+  <div class="about-section-card">
+    <h2>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-danger)" stroke-width="2"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+      {{ t('about_known_limitations') }}
+    </h2>
+    <ul class="about-list">
+      <li>{{ t('about_limit_independent_samples') }}</li>
+      <li>{{ t('about_limit_bm25') }}</li>
+      <li>{{ t('about_limit_romanized') }}</li>
+      <li>{{ t('about_limit_judge') }}</li>
+      <li>{{ t('about_limit_distractors') }}</li>
+      <li>{{ t('about_limit_not_guidance') }}</li>
     </ul>
-</div>
+  </div>
 
-<div class="card">
-    <h2 style="font-size:1rem;margin-bottom:8px">{{ t('about_run_it') }}</h2>
-    <pre style="font-size:.78rem;background:#f4f8fc;padding:12px;border-radius:8px;overflow-x:auto">uv venv .venv && uv pip install -r requirements.txt
+  <div class="about-section-card">
+    <h2>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)" stroke-width="2"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+      {{ t('about_run_it') }}
+    </h2>
+    <pre class="code-block">uv venv .venv && uv pip install -r requirements.txt
 .venv/bin/python src/app.py --port 8001     # {{ t('about_web_app') }}
 .venv/bin/python -m src.run_pipeline --stage data       # {{ t('about_research_pipeline') }}
 .venv/bin/python -m src.run_pipeline --stage analyze</pre>
-    <p style="font-size:.8rem;color:var(--muted);margin-top:8px">
-        {{ t('about_full_report') }}: <code>report/REPORT.md</code> ·
-        {{ t('about_tables') }}: <code>report/tables.md</code> ·
-        {{ t('about_failure_examples') }}: <code>report/failures_examples.md</code>
+    <p style="font-size:0.84rem; color:var(--text-muted); margin-top:12px;">
+      {{ t('about_full_report') }}: <code>report/REPORT.md</code> ·
+      {{ t('about_tables') }}: <code>report/tables.md</code> ·
+      {{ t('about_failure_examples') }}: <code>report/failures_examples.md</code>
     </p>
+  </div>
 </div>
 {% endblock %}

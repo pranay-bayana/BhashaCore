@@ -1,82 +1,86 @@
-# BhashaCore — Language-Agnostic Chatbot Evaluation
+# BhashaCore
 
-**Question:** Government chatbots perform worse in regional Indian languages — *where exactly does answer quality drop?*
+BhashaCore is a multilingual Indian-language research chatbot and evaluation platform. It supports English, Hindi, Telugu, Tamil, Kannada, and Malayalam with BM25 retrieval, citation provenance, Romanized Indic input handling, and Sarvam-backed live generation.
 
-BhashaCore builds a chatbot (RAG) pipeline and evaluates it across **English (control)** and five
-Indic languages — **Hindi, Tamil, Telugu, Kannada, Malayalam** — decomposing quality into:
+## Architecture
 
-1. **Reading/generation gap** — same model, gold context given → measures the LLM's comprehension & generation per language (`gold_context`).
-2. **Knowledge gap** — closed-book QA → what the model already knows in each language (`closed_book`).
-3. **Retrieval gap** — RAG over a retrieval pool → added loss from BM25 retrieval in each script (`rag`).
-4. **Input-normalization gap** — Romanized/transliterated queries through the same RAG → the realistic "user types Hinglish" stress test (`rag_translit`).
+- **Flask** provides APIs, authentication, CSRF, rate limits, migrations, and the production web server entry point.
+- **React + TypeScript + Vite** provides the single-page interface in `frontend/src`; Flask serves the production build from `frontend/dist`.
+- **PostgreSQL + SQLAlchemy + Alembic** store accounts and authenticated conversations. Guest conversations are expiry-bound server-side sessions.
+- **Redis** is required in production for shared rate limits.
+- **BM25** retrieval uses the checked-in research corpus and results in `data/`, `results/`, and `report/`.
 
-## Data
+## Repository layout
 
-- **Knowledge base / retrieval pools:** AI4Bharat **IndicCorp v2** (`ai4bharat/IndicCorpV2`) — streamed & sampled per language.
-- **QA evaluation:** AI4Bharat **IndicQA** (`ai4bharat/IndicQA`) for the five Indic languages; **SQuAD v1.1** validation as the English control.
-- Retrieval pool per language = all QA contexts for that language + ~3k IndicCorp passages as distractors (gold passage guaranteed present → Recall@k / MRR are measurable).
-
-## Models (NVIDIA-hosted)
-
-All generation goes through NVIDIA's OpenAI-compatible endpoint (`integrate.api.nvidia.com/v1`):
-
-- **Generator (primary):** `minimaxai/minimax-m3.1-flash` — fast flash-class model, the
-  economical class governments actually deploy; identical across all languages so gaps
-  are language effects, not model effects. (A flagship-class model, `z-ai/glm-5.3-flash`,
-  is run on a 25-question/language subset as a robustness check.)
-- **Judge (LLM-as-judge):** a *different* model family from the generator —
-  translate-then-judge in English to avoid Indic-language judge bias.
-
-## Metrics
-
-- **Extractive:** EM, token-F1 (script-aware normalization: NFC, punctuation/ZWJ strip, no article removal bias for Indic).
-- **Judge scores:** correctness 0–5, faithfulness 1–5 (context modes), response-language check.
-- **Language quality:** script purity (Unicode-block ratio), % responses in-language, code-mixing detection.
-- **Retrieval:** Recall@5, MRR@10 per language.
-- **Failure taxonomy:** retrieval miss / unfaithful / wrong language / refusal / wrong answer, with hand-picked example failures + English glosses.
-
-## Pipeline
-
-```
-uv venv .venv && uv pip install -r requirements.txt   # setup
-.venv/bin/python -m src.run_pipeline --stage data      # download + sample + pools
-.venv/bin/python -m src.run_pipeline --stage retrieve  # BM25 retrieval + metrics
-.venv/bin/python -m src.run_pipeline --stage generate --model z-ai/glm-5.3
-.venv/bin/python -m src.run_pipeline --stage judge
-.venv/bin/python -m src.run_pipeline --stage analyze   # tables, charts, taxonomy
+```text
+src/          Flask app, auth, retrieval, provider, translations
+frontend/     React source and Vite configuration
+migrations/   Alembic migration history
+tests/        Automated backend and browser checks
+scripts/      Reproducible ingestion and evaluation utilities
+data/         Research datasets and processed knowledge pools
+results/      Evaluation outputs
+report/       Research report and supporting figures
 ```
 
-Output: `report/REPORT.md` (+ `report/figures/`) — the comparison report with per-language
-accuracy/quality tables, the quality-drop waterfall, and example failures per language.
+## Setup
 
-## Web app
-
-```
-.venv/bin/python src/app.py --port 8001     # http://127.0.0.1:8001
+```sh
+scripts/dev_setup.sh
 ```
 
-Pages: **Chat** (real BM25 retrieval over the indexed corpus, streaming NDJSON answers,
-expandable citations), **Research Dashboard** (saved evaluation results),
-**Language Comparison** (per-language quality waterfall), **Failure Analysis**
-(filterable real failure records), **About** (metric definitions and limitations).
+Configure `.env` locally. It is ignored by Git. At minimum, configure the database URL, Flask secret, Sarvam credentials, and public base URL for the environment you are running.
 
-- Retrieval, citations and evidence-sufficiency checks run identically with or without a
-  configured LLM key.
-- With `NVIDIA_API_KEY` configured, grounded answers are generated live via the NVIDIA NIM
-  endpoint; without it, grounded answers use the evaluation dataset's own gold answers
-  (labelled `dataset-eval-gold`). Unsupported questions always receive an explicit
-  "insufficient evidence" notice with closest-match references (not used).
-- Session chat history is persisted under `chat_history/` (git-ignored).
+## Development
 
-### Tests
-
-```
-.venv/bin/python -m pytest tests/ -v            # API + retrieval + citation integrity (25 tests)
-python3 tests/browser_e2e.py                    # Playwright end-to-end (47 checks)
+```sh
+scripts/dev_start.sh
 ```
 
-## Reproducibility
+This starts the combined Flask + built React application on port `8001` by
+default. The setup script reuses an existing `.venv` and never deletes `.env`,
+databases, local user data, or development configuration.
 
-All sampling is seeded (`SEED=42`). Generation/judge runs are **resumable**: completed question IDs
-are skipped on re-run, so crashed batches cost nothing. The NVIDIA NIM key is read from the
-environment / OpenCode config at runtime and never written into the repo.
+For frontend iteration, run `npm run dev` inside `frontend/`. The Vite server proxies API requests to the Flask server on port 8001.
+
+## Testing
+
+```sh
+pytest -q
+cd frontend && npm run lint && npm run build
+```
+
+Tests cover authentication, CSRF, conversation ownership, guest quotas, retrieval, citations, languages, migrations, and provider behavior. Browser verification results are recorded in [E2E_TEST_REPORT.md](E2E_TEST_REPORT.md).
+
+## Production deployment
+
+Set `APP_ENV=production` and configure all of the following outside source control:
+
+```text
+DATABASE_URL=postgresql+psycopg://...
+REDIS_URL=redis://...
+FLASK_SECRET_KEY=...
+SESSION_COOKIE_SECURE=true
+TRUSTED_HOSTS=app.example.com
+GENERATION_PROVIDER=sarvam
+SARVAM_API_KEY=...
+SARVAM_MODEL=sarvam-105b-conversations
+EMAIL_PROVIDER=resend
+EMAIL_API_KEY=...
+EMAIL_FROM=...
+APP_BASE_URL=https://app.example.com
+```
+
+Build the frontend, then apply migrations before starting Gunicorn:
+
+```sh
+cd frontend && npm ci && npm run build && cd ..
+flask --app wsgi db upgrade
+gunicorn --config gunicorn.conf.py wsgi:app
+```
+
+See [DEPLOYMENT.md](DEPLOYMENT.md), [PRODUCTION_READINESS_REPORT.md](PRODUCTION_READINESS_REPORT.md), and [SECURITY_AUDIT_REPORT.md](SECURITY_AUDIT_REPORT.md) for verified status and remaining infrastructure work.
+
+## Research reproducibility
+
+The datasets, processed pools, results, and report figures are retained for reproducibility. Use `python -m src.run_pipeline --help` to inspect supported pipeline stages. Evaluation and ingestion utilities in `scripts/` are kept only where they reproduce research inputs or reported measurements.
