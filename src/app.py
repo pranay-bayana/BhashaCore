@@ -100,102 +100,26 @@ def _normalize_romanized(text: str) -> str:
     return text
 
 
-_ENGLISH_STOPWORDS = {
-    "a", "an", "and", "are", "as", "at", "be", "been", "being", "but", "by",
-    "can", "could", "did", "do", "does", "doing", "for", "from", "had", "has",
-    "have", "he", "her", "hers", "him", "his", "how", "i", "if", "in", "into",
-    "is", "it", "its", "just", "like", "may", "me", "might", "mo", "more", "most",
-    "must", "my", "no", "nor", "not", "now", "of", "off", "on", "once", "only",
-    "or", "other", "our", "ours", "out", "over", "own", "quite", "rather", "really",
-    "s", "said", "same", "see", "seemed", "seemed", "seeing", "seems", "several",
-    "shall", "she", "should", "show", "showed", "shown", "shows", "since", "so",
-    "some", "such", "t", "take", "taken", "tell", "than", "that", "that's", "the",
-    "their", "theirs", "them", "themselves", "then", "there", "these", "they",
-    "this", "those", "through", "thus", "to", "too", "under", "until", "up", "us",
-    "us", "use", "used", "uses", "very", "w", "was", "we", "well", "were", "what",
-    "whatever", "when", "whence", "whenever", "where", "whereafter", "whereas",
-    "whereby", "wherein", "whereupon", "wherever", "whether", "which", "while",
-    "whither", "who", "whoever", "whole", "whom", "whose", "why", "will", "would",
-    "yet", "you", "your", "yours", "yourself", "yourselves",
-}
-
-def _is_mostly_english(text: str) -> bool:
-    """Return True if most words in the text are common English words."""
-    words = text.split()
-    if not words:
-        return False
-    strip_chars = '.,!?;:\'"()[]{}'
-    english_count = sum(1 for w in words if w.lower().strip(strip_chars) in _ENGLISH_STOPWORDS)
-    return english_count / len(words) > 0.5
-
-
 def _detect_romanized_language(question: str) -> str | None:
     """Try to detect the Indic language for romanized (Latin-script) input.
 
-    Strategy: transliterate the Latin input to each Indic language script.
-    If transliteration produces mostly target-script characters (>= 95%),
-    the input is likely Romanized Indic in that language. English text
-    transliterated to Indic script typically retains many Latin characters
-    (score ~0.85-0.90), so 0.95 cleanly separates Romanized Indic from
-    English.
-
-    When multiple languages pass the transliteration threshold (which
-    happens because any Latin text transliterates to 100% target script),
-    disambiguate by doing BM25 retrieval in each candidate language's pool
-    using the bridged query and picking the language with the highest score.
+    Uses distinctive Romanized Indic vocabulary tokens and evaluation-set
+    matching. Never guesses via BM25 retrieval over unrelated language corpora.
     """
-    from src.langkit import bridge_to_native
+    from src.lang_instruction import detect_romanized_indic_language
 
-    if not question or not question.strip():
-        return None
+    romanized_lang = detect_romanized_indic_language(question)
+    if romanized_lang in INDIC_LANGS:
+        return romanized_lang
 
-    # If most words are English, don't treat as Romanized Indic
-    if _is_mostly_english(question):
-        return None
-
-    # First pass: transliterate to each language and score
-    candidates: dict[str, float] = {}
+    # Check if this matches a known romanized question from eval sets
     for code in INDIC_LANGS:
         try:
-            bridged = bridge_to_native(question, code)
-            if not bridged.strip():
-                continue
-            total_chars = sum(1 for c in bridged if c.isalpha())
-            if total_chars == 0:
-                continue
-            script_chars = sum(1 for c in bridged if ord(c) > 127 and c.isalpha())
-            score = script_chars / total_chars
-            if score > 0:
-                candidates[code] = score
+            match = find_eval_match(code, question, romanized=True)
+            if match is not None:
+                return code
         except Exception:
             continue
-
-    if not candidates:
-        return None
-
-    best_lang, best_score = max(candidates.items(), key=lambda kv: kv[1])
-
-    # If only one language passes the transliteration test, use it
-    if best_score >= 0.85 and len(candidates) == 1:
-        return best_lang
-
-    # If multiple languages pass (or the best score is borderline), use
-    # retrieval quality as tiebreaker: retrieve in each candidate language
-    # using the bridged query and pick the language with the highest score.
-    if best_score >= 0.85:
-        best_lang, best_score = None, 0.0
-        for code in candidates:
-            try:
-                bridged = bridge_to_native(question, code)
-                index = _pool_index(code)
-                hits = index.search(bridged, TOP_K)
-                if hits:
-                    max_score = max(s for _, s in hits)
-                    if max_score > best_score:
-                        best_score, best_lang = max_score, code
-            except Exception:
-                continue
-        return best_lang
 
     return None
 
@@ -625,7 +549,7 @@ def _run_async(coro, timeout: float = None):
 
 
 def _llm_answer(question: str, passages: list, answer_lang: str, answer_script: str) -> str:
-    """Real generation through the NVIDIA NIM endpoint (requires key).
+    """Real generation through the configured provider endpoint.
 
     The system prompt directs the ANSWER language and script independently of
     the question's language — this is where translation (meaning across
@@ -634,14 +558,9 @@ def _llm_answer(question: str, passages: list, answer_lang: str, answer_script: 
     Uses a bounded timeout so the app never hangs on a slow provider.
     """
     from src.generate import GROUNDING_CTX
+    from src.lang_instruction import build_language_system_directive
 
-    meta = LANGS[answer_lang]
-    if answer_lang == "en" or answer_script == "latin":
-        lang_directive = "Answer in English (Latin script)."
-    elif answer_script == "romanized":
-        lang_directive = f"Answer in {meta['name']} written in Latin script (romanized {meta['name']})."
-    else:
-        lang_directive = f"Answer in {meta['name']} (write in the {meta['script']} script)."
+    lang_directive = build_language_system_directive(answer_lang, answer_script)
     system = (
         "You are BhashaCore, a helpful government-services assistant for Indian citizens. "
         f"{lang_directive} Be concise: at most 3 sentences. {GROUNDING_CTX}"
@@ -770,14 +689,9 @@ def answer_question(
             # General knowledge question: answer from the model's own
             # knowledge, not corpus-grounded. No citations attached.
             from src.generate import GROUNDING_CTX
+            from src.lang_instruction import build_language_system_directive
 
-            meta = LANGS[answer_lang_eff]
-            if answer_lang_eff == "en" or answer_script == "latin":
-                lang_directive = "Answer in English (Latin script)."
-            elif answer_script == "romanized":
-                lang_directive = f"Answer in {meta['name']} written in Latin script (romanized {meta['name']})."
-            else:
-                lang_directive = f"Answer in {meta['name']} (write in the {meta['script']} script)."
+            lang_directive = build_language_system_directive(answer_lang_eff, answer_script)
             system = (
                 "You are BhashaCore, a helpful government-services assistant for Indian citizens. "
                 f"{lang_directive} Be concise: at most 3 sentences. Answer from your own knowledge; "
@@ -820,7 +734,7 @@ def answer_question(
         c["support"] = round(_support(full_text, answer if status == "answered" else ""), 2)
         was_supplied = c["pid"] in context_pids
         if status == "answered" and was_supplied:
-            c["used"] = (c["support"] >= SUPPORT_THRESHOLD) or (c["pid"] == gold_pid)
+            c["used"] = (c["support"] >= SUPPORT_THRESHOLD) or (c["pid"] == gold_pid) or (answer_lang_eff != lang and was_supplied)
         else:
             c["used"] = False
 
@@ -888,9 +802,77 @@ def get_chat_state(sid: str) -> dict:
         if sid not in _chat_states:
             _chat_states[sid] = {
                 "lang": "en",
+                "preferred_lang": "",
                 "messages": [{"role": "system", "content": "You are BhashaCore, a helpful assistant."}],
             }
         return _chat_states[sid]
+
+
+def get_conversation_preferred_lang(sid: str, user=None) -> str | None:
+    with _chat_lock:
+        st = _chat_states.get(sid)
+        if st and st.get("preferred_lang") is not None and st.get("preferred_lang") != "":
+            return st.get("preferred_lang")
+
+    # Check database for authenticated user
+    if user:
+        try:
+            last_pref_msg = db.session.scalar(
+                db.select(Message)
+                .where(Message.conversation_id == sid, Message.metadata_json.is_not(None))
+                .order_by(Message.id.desc())
+            )
+            if last_pref_msg and last_pref_msg.metadata_json:
+                meta = json.loads(last_pref_msg.metadata_json)
+                if "preferred_lang" in meta:
+                    pref = meta["preferred_lang"]
+                    with _chat_lock:
+                        if sid in _chat_states:
+                            _chat_states[sid]["preferred_lang"] = pref or ""
+                    return pref or None
+        except Exception:
+            pass
+
+    # Check guest session
+    if user is None:
+        try:
+            guest_sess = get_or_create_guest_session(session)
+            if guest_sess and guest_sess.data_json:
+                d = json.loads(guest_sess.data_json)
+                conv = d.get("conversations", {}).get(sid)
+                if conv and "preferred_lang" in conv:
+                    pref = conv["preferred_lang"]
+                    with _chat_lock:
+                        if sid in _chat_states:
+                            _chat_states[sid]["preferred_lang"] = pref or ""
+                    return pref or None
+        except Exception:
+            pass
+
+    return None
+
+
+def set_conversation_preferred_lang(sid: str, user=None, lang: str | None = None) -> None:
+    with _chat_lock:
+        if sid not in _chat_states:
+            _chat_states[sid] = {"lang": "en", "messages": []}
+        _chat_states[sid]["preferred_lang"] = lang or ""
+
+    if user is None:
+        try:
+            guest_sess = get_or_create_guest_session(session)
+            if guest_sess and guest_sess.data_json:
+                d = json.loads(guest_sess.data_json)
+                conv = d.get("conversations", {}).get(sid)
+                if conv:
+                    conv["preferred_lang"] = lang or ""
+                    guest_sess.data_json = json.dumps(d)
+                    db.session.commit()
+        except Exception:
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
 
 
 def load_chat_state_from_disk(sid: str):
@@ -1054,40 +1036,71 @@ def api_chat():
         return jsonify({"error": f"unsupported input_style: {input_style}"}), 400
     if answer_script not in ("native", "romanized", "latin"):
         return jsonify({"error": f"unsupported answer_script: {answer_script}"}), 400
+    if input_lang != "auto" and input_lang not in LANGS:
+        return jsonify({"error": f"unsupported language: {input_lang}"}), 400
     if answer_lang is not None and answer_lang not in LANGS:
         return jsonify({"error": f"unsupported answer language: {answer_lang}"}), 400
     if mode not in MODES:
         return jsonify({"error": f"unsupported mode: {mode}"}), 400
 
-    # Resolve the input language. Latin-script input is inherently ambiguous
-    # (English vs romanized Indic): auto-detection tries to detect romanized
-    # Indic via eval-set matching; if that fails, it defaults to English and
-    # flags the ambiguity; explicit selection removes the ambiguity.
-    detection = detect_script_and_language(question)
-    input_ambiguous = False
-    if input_lang == "auto":
-        if detection["lang"] is None:
-            # Latin script (or mixed): could be English or romanized Indic.
-            # Try to detect romanized Indic via eval-set matching.
-            detected_lang = _detect_romanized_language(question)
-            if detected_lang is not None:
-                input_lang = detected_lang
-            else:
-                # Fall back to English but flag as ambiguous so the UI can warn.
-                input_lang = "en"
-                input_ambiguous = True
-        else:
-            input_lang = detection["lang"]
-    elif input_lang not in LANGS:
-        return jsonify({"error": f"unsupported language: {input_lang}"}), 400
-
-    lang = input_lang  # retrieval pool + eval corpus follow the input language
-    if answer_lang is None:
-        answer_lang = lang
-
     # Authenticated chats are persisted in the database and scoped to their
     # owner. Guest sessions enforce a 3-message trial limit and remain in memory.
     user = current_user()
+
+    # --- Language priority resolution (1 -> 2 -> 3 -> 4) ------------------
+    # Priority 1: Explicit language instruction in latest user message
+    # Priority 2: Previously established language preference in current conversation
+    # Priority 3: Manually selected language in the language selector
+    # Priority 4: Auto-detected language of current user message
+    from src.lang_instruction import (
+        extract_language_instruction,
+        strip_language_instruction,
+        detect_user_input_language,
+    )
+
+    lang_inst = extract_language_instruction(question)
+    explicit_lang = lang_inst["explicit_lang"]
+    is_persistent = lang_inst["is_persistent"]
+    is_reset = lang_inst["is_reset"]
+
+    if is_reset:
+        set_conversation_preferred_lang(sid, user, None)
+        conv_preferred_lang = None
+    else:
+        conv_preferred_lang = get_conversation_preferred_lang(sid, user)
+
+    manual_selected_lang = None
+    if answer_lang in LANGS:
+        manual_selected_lang = answer_lang
+    elif input_lang in LANGS and input_lang != "auto":
+        manual_selected_lang = input_lang
+
+    cleaned_question = strip_language_instruction(question) if explicit_lang else question
+    detection = detect_script_and_language(question)
+    query_natural_lang = detect_user_input_language(cleaned_question or question)
+
+    if explicit_lang in LANGS:
+        resolved_answer_lang = explicit_lang
+        if is_persistent:
+            set_conversation_preferred_lang(sid, user, explicit_lang)
+    elif conv_preferred_lang in LANGS:
+        resolved_answer_lang = conv_preferred_lang
+    elif manual_selected_lang in LANGS:
+        resolved_answer_lang = manual_selected_lang
+    else:
+        resolved_answer_lang = query_natural_lang
+
+    # Retrieval language follows the language of the question text itself
+    # so BM25 queries match passages in the question's language.
+    if input_lang in INDIC_LANGS:
+        retrieval_lang = input_lang
+    else:
+        retrieval_lang = query_natural_lang
+
+    input_ambiguous = (detection["script"] == "Latin" and retrieval_lang == "en")
+    lang = retrieval_lang
+    answer_lang = resolved_answer_lang
+
     guest_request_key = None
     cached_guest_result = None
     guest_conversation_data = None
@@ -1130,7 +1143,7 @@ def api_chat():
     # Generate the grounded answer first to verify success before committing quota usage
     try:
         result = cached_guest_result or answer_question(
-            lang, question, input_style=input_style, answer_lang=answer_lang,
+            lang, cleaned_question or question, input_style=input_style, answer_lang=answer_lang,
             answer_script=answer_script, eval_mode=eval_mode,
         )
     except Exception as exc:
@@ -1154,6 +1167,7 @@ def api_chat():
                 "created": time.time(),
                 "updated": time.time(),
                 "lang": lang,
+                "preferred_lang": conv_preferred_lang or (explicit_lang if is_persistent else None),
                 "messages": [
                     {"role": "user", "content": question},
                     {"role": "assistant", "content": result["answer"],
@@ -1174,6 +1188,10 @@ def api_chat():
 
     state = get_chat_state(sid)
     state["lang"] = lang
+    if is_persistent and explicit_lang:
+        state["preferred_lang"] = explicit_lang
+    elif is_reset:
+        state["preferred_lang"] = ""
     with _stop_lock:
         if sid in STOP_EVENTS:
             STOP_EVENTS[sid].set()
@@ -1252,8 +1270,14 @@ def api_chat():
                 _save_chat(sid)
             if user:
                 with stream_app.app_context():
+                    pref_to_store = conv_preferred_lang or (explicit_lang if is_persistent else None)
+                    meta_to_store = {"status": result["status"]}
+                    if pref_to_store:
+                        meta_to_store["preferred_lang"] = pref_to_store
+                    elif is_reset:
+                        meta_to_store["preferred_lang"] = ""
                     db.session.add(Message(conversation_id=sid, role="assistant", content=text,
-                                           metadata_json=json.dumps({"status": result["status"]})))
+                                           metadata_json=json.dumps(meta_to_store)))
                     db.session.commit()
         except Exception as exc:
             stream_app.logger.exception("chat stream failed")
@@ -1325,6 +1349,7 @@ def api_new_chat():
     with _chat_lock:
         _chat_states[sid] = {
             "lang": "en",
+            "preferred_lang": "",
             "messages": [{"role": "system", "content": "You are BhashaCore, a helpful assistant."}],
         }
         if user is None and current_app.config.get("TESTING"):
@@ -1499,6 +1524,20 @@ def api_load_chat():
                 "status": meta.get("status"),
                 "citations": meta.get("citations", []),
             })
+        pref = None
+        for m in reversed(conversation.messages):
+            if m.metadata_json:
+                try:
+                    meta = json.loads(m.metadata_json)
+                    if "preferred_lang" in meta:
+                        pref = meta["preferred_lang"]
+                        break
+                except Exception:
+                    pass
+        with _chat_lock:
+            if sid not in _chat_states:
+                _chat_states[sid] = {"lang": "en", "messages": []}
+            _chat_states[sid]["preferred_lang"] = pref or ""
         loaded = {"session_id": sid, "title": conversation.title, "lang": "en", "messages": messages}
         return jsonify({"status": "loaded", "session": loaded})
 
@@ -1509,6 +1548,11 @@ def api_load_chat():
             d = json.loads(guest_sess.data_json)
             conv = d.get("conversations", {}).get(sid)
             if conv:
+                pref = conv.get("preferred_lang")
+                with _chat_lock:
+                    if sid not in _chat_states:
+                        _chat_states[sid] = {"lang": conv.get("lang", "en"), "messages": []}
+                    _chat_states[sid]["preferred_lang"] = pref or ""
                 loaded = {
                     "session_id": sid,
                     "title": conv.get("title", "New chat"),

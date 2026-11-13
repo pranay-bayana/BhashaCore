@@ -71,7 +71,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
     onSendMessage(question.trim(), {
       inputLang,
       inputStyle,
-      answerLang: answerLang === 'auto' ? null : answerLang,
+      answerLang: answerLang === 'auto' ? (inputLang === 'auto' ? null : inputLang) : answerLang,
       answerScript: 'native',
     });
 
