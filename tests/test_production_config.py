@@ -140,16 +140,19 @@ def test_render_blueprint_matches_repo_spec():
     assert service["type"] == "web"
     assert service["name"] == "bhashacore"
     assert service["runtime"] == "python"
-    assert service["startCommand"] == "gunicorn --config gunicorn.conf.py wsgi:app"
+    assert service["plan"] == "free"
+    assert service["startCommand"] == "flask --app wsgi db upgrade && gunicorn --config gunicorn.conf.py wsgi:app"
     assert service["healthCheckPath"] == "/health"
     assert "pip install" in service["buildCommand"]
     assert "npm run build" in service["buildCommand"]
-    assert service["preDeployCommand"] == "flask --app wsgi db upgrade"
+    assert "preDeployCommand" not in service
 
     # Verify python version matches .python-version
     py_version_file = (ROOT / ".python-version").read_text(encoding="utf-8").strip()
     env_vars = {item["key"]: item.get("value") for item in service["envVars"]}
     assert env_vars.get("PYTHON_VERSION") == py_version_file
+    assert env_vars.get("NODE_VERSION") == "22.14.0"
+    assert env_vars.get("WEB_CONCURRENCY") == "1"
     assert env_vars.get("GENERATION_PROVIDER") == "sarvam"
     assert env_vars.get("SARVAM_MODEL") == "sarvam-105b-conversations"
     assert env_vars.get("APP_ENV") == "production"

@@ -2,10 +2,9 @@ services:
   - type: web
     name: bhashacore
     runtime: python
-    plan: starter
+    plan: free
     buildCommand: pip install -r requirements.txt && npm ci --prefix frontend && npm run build --prefix frontend
-    preDeployCommand: flask --app wsgi db upgrade
-    startCommand: gunicorn --config gunicorn.conf.py wsgi:app
+    startCommand: flask --app wsgi db upgrade && gunicorn --config gunicorn.conf.py wsgi:app
     healthCheckPath: /health
     autoDeploy: true
     envVars:
@@ -16,7 +15,7 @@ services:
       - key: NODE_VERSION
         value: 22.14.0
       - key: WEB_CONCURRENCY
-        value: "2"
+        value: "1"
       - key: GENERATION_PROVIDER
         value: sarvam
       - key: SARVAM_MODEL

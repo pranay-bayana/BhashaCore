@@ -14,7 +14,7 @@ configuration uses `GENERATION_PROVIDER=sarvam`, `SARVAM_API_KEY`, and
 The repository contains `render.yaml`. Create a Render Blueprint from the
 repository, enter the values marked `sync: false` in Render's secret UI, and
 keep them out of Git. Render builds the React application into `frontend/dist`,
-runs Alembic as a pre-deploy command, then starts Gunicorn.
+applies any pending Alembic migrations at service boot, then starts Gunicorn.
 
 Render uses the committed `.python-version` (and matching Blueprint
 `PYTHON_VERSION`) to avoid an unexpected platform-default Python upgrade.
@@ -23,8 +23,8 @@ Render uses the committed `.python-version` (and matching Blueprint
 # Render build command
 pip install -r requirements.txt && npm ci --prefix frontend && npm run build --prefix frontend
 
-# Render start command
-gunicorn --config gunicorn.conf.py wsgi:app
+# Render start command (includes non-destructive migration before Gunicorn boot)
+flask --app wsgi db upgrade && gunicorn --config gunicorn.conf.py wsgi:app
 ```
 
 Render's health check is `/health`. It performs a database ping and loads all
@@ -94,13 +94,15 @@ state across Gunicorn workers. Current application limits are 5 sign-ups/hour,
 10 sign-ins/hour, and 20 chat generations/hour per client IP; adjust them for
 your traffic and provider budget.
 
-For Render, the migration command is configured as the Blueprint
-`preDeployCommand`:
+For the Render Free plan (which does not support `preDeployCommand`), database
+migration is embedded directly in the start command:
 
 ```sh
-flask --app wsgi db upgrade
+flask --app wsgi db upgrade && gunicorn --config gunicorn.conf.py wsgi:app
 ```
 
-It is non-destructive and uses the existing Alembic revision chain. Inspect
-`flask --app wsgi db current` against Supabase before the first deployment;
-never use `stamp`, `drop_all`, or `db init` against the remote database.
+`WEB_CONCURRENCY=1` is configured to keep memory consumption safely within the
+512 MB free instance limit. The migration is non-destructive and uses the existing
+Alembic revision chain. Inspect `flask --app wsgi db current` against Supabase
+before the first deployment; never use `stamp`, `drop_all`, or `db init` against
+the remote database.
