@@ -31,6 +31,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from dotenv import load_dotenv
 from sqlalchemy.exc import SQLAlchemyError
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -77,6 +78,7 @@ from src.auth import (Conversation, Message, GuestSession, authenticate, complet
                       release_guest_response, reserve_guest_response,
                       reset_password)  # noqa: E402
 from src.emailer import send_password_reset  # noqa: E402
+from src.runtime_assets import validate_runtime_assets  # noqa: E402
 
 
 def _normalize_romanized(text: str) -> str:
@@ -215,6 +217,11 @@ if _production and _database_url and not _database_url.startswith(("postgresql:/
 _trusted_hosts = [host.strip() for host in os.environ.get("TRUSTED_HOSTS", "").split(",") if host.strip()]
 if _production and not _trusted_hosts:
     raise RuntimeError("TRUSTED_HOSTS is required when APP_ENV=production")
+_generation_provider = os.environ.get("GENERATION_PROVIDER", "nvidia").lower()
+if _production and _generation_provider == "sarvam" and not os.environ.get("SARVAM_API_KEY"):
+    raise RuntimeError("SARVAM_API_KEY is required when GENERATION_PROVIDER=sarvam in production")
+if _production and _generation_provider not in {"sarvam", "nvidia"}:
+    raise RuntimeError("GENERATION_PROVIDER must be sarvam or nvidia in production")
 app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET_KEY") or "bhashacore-dev-secret-key-2026-multilingual-evaluation"
 app.config["SQLALCHEMY_DATABASE_URI"] = _database_url or f"sqlite:///{ROOT / 'instance' / 'bhashacore_dev_v2.sqlite3'}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
@@ -244,6 +251,11 @@ app.config["SESSION_COOKIE_SECURE"] = os.environ.get("SESSION_COOKIE_SECURE", "f
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
 app.config["TRUSTED_HOSTS"] = _trusted_hosts or None
 app.config["ALLOW_ANONYMOUS_CHAT"] = not _production and os.environ.get("ALLOW_ANONYMOUS_CHAT", "true").lower() == "true"
+if _production:
+    # Render terminates TLS upstream. Trust exactly one proxy hop so Flask
+    # recognizes HTTPS for secure cookies and security headers.
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+    validate_runtime_assets()
 init_auth(app)
 csrf = CSRFProtect(app)
 limiter = Limiter(key_func=get_remote_address, app=app, storage_uri=app.config["RATELIMIT_STORAGE_URI"], enabled=app.config.get("RATELIMIT_ENABLED", True))

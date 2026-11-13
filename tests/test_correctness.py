@@ -100,6 +100,7 @@ def test_telugu_grounding_used_citations_genuinely_support_deterministic(client,
     assert all(isinstance(c["support"], (int, float)) for c in done["citations"])
 
 
+@pytest.mark.live_llm
 def test_telugu_grounding_live_llm_contract(client):
     """With the live LLM, used-marking still obeys the support contract."""
     _, done = _chat(client, "te", TELUUGU_Q, session="correctness-te-live")

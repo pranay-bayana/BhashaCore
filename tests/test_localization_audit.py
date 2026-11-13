@@ -241,6 +241,7 @@ def test_translations_api_endpoints(client):
 # TEST 5: PLAYWRIGHT IN-PLACE CLIENT-SIDE LOCALIZATION (NO RELOAD)
 # ==============================================================================
 @pytest.mark.anyio
+@pytest.mark.playwright
 async def test_playwright_inplace_language_switching(anyio_backend):
     """Verify in-place language switching on / without page refresh using Playwright."""
     from playwright.async_api import async_playwright

@@ -221,6 +221,7 @@ def test_translation_live_llm_smoke(client):
     assert used, "cross-language answers still cite their evidence anchor"
 
 
+@pytest.mark.live_llm
 def test_answer_language_malayalam_live_llm(client):
     _, events = _chat(client, {"input_lang": "hi", "question": "ताजमहल कहां स्थित है?", "answer_lang": "ml"})
     done = _done(events)

@@ -241,10 +241,12 @@ def test_chat_validation(client):
 # ---------------------------------------------------------------------------
 
 
-def test_new_chat_history_roundtrip(client, tmp_path):
+def test_new_chat_history_roundtrip(client, tmp_path, monkeypatch):
+    import src.app as app_mod
+    monkeypatch.setattr(app_mod, "HAS_LLM", False)
     sid = "pytest-persist-1"
     assert client.post("/api/new-chat", data=json.dumps({"session_id": sid}), content_type="application/json").status_code == 200
-    resp = _chat(client, "hi", "ताजमहल कहां स्थित है?", session=sid)
+    resp = _chat(client, "hi", "ताजमहल कहां स्थित है?", session=sid, eval_mode=True)
     assert resp.status_code == 200
     # a streaming response must be consumed to run to completion
     assert "done" in [e["type"] for e in _parse_ndjson(resp.get_data(as_text=True))]

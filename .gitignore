@@ -14,7 +14,11 @@ __pycache__/
 *.pyc
 .DS_Store
 data/raw/
-data/processed/
+# Only the compact, BM25-ready runtime artifacts are deployed.  Raw source
+# corpora and other generated processing output stay out of Git.
+data/processed/*
+!data/processed/pool_*.jsonl
+!data/processed/eval_*.jsonl
 results/gen/
 results/judge/
 results/*.jsonl

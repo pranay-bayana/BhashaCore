@@ -2,10 +2,48 @@
 
 ## Required configuration
 
-Set `FLASK_SECRET_KEY` to a unique high-entropy value and set `DATABASE_URL`
+Set `APP_ENV=production`, `FLASK_SECRET_KEY` to a unique high-entropy value and set `DATABASE_URL`
 to a managed PostgreSQL database using the `postgresql+psycopg://` SQLAlchemy
 scheme. Do not use the SQLite fallback for deployed user data. Configure
-`NVIDIA_API_KEY` only in the server environment.
+provider credentials only in the server environment. BhashaCore's production
+configuration uses `GENERATION_PROVIDER=sarvam`, `SARVAM_API_KEY`, and
+`SARVAM_MODEL=sarvam-105b-conversations`.
+
+## Render
+
+The repository contains `render.yaml`. Create a Render Blueprint from the
+repository, enter the values marked `sync: false` in Render's secret UI, and
+keep them out of Git. Render builds the React application into `frontend/dist`,
+runs Alembic as a pre-deploy command, then starts Gunicorn.
+
+Render uses the committed `.python-version` (and matching Blueprint
+`PYTHON_VERSION`) to avoid an unexpected platform-default Python upgrade.
+
+```sh
+# Render build command
+pip install -r requirements.txt && npm ci --prefix frontend && npm run build --prefix frontend
+
+# Render start command
+gunicorn --config gunicorn.conf.py wsgi:app
+```
+
+Render's health check is `/health`. It performs a database ping and loads all
+six BM25 pools, so a 200 response means both persistence and RAG assets are
+available. Do not point the health check at a route that bypasses either.
+
+### Runtime RAG assets
+
+The deployment includes only `data/processed/pool_<lang>.jsonl` and
+`data/processed/eval_<lang>.jsonl` for `en`, `hi`, `te`, `ta`, `kn`, and `ml`,
+plus the compact optional `pool_<lang>_knowledge.jsonl` files. Raw source
+corpora remain ignored. Production startup explicitly fails with an actionable
+error if any required pool or evaluation map is missing or empty.
+
+Check these assets locally before pushing:
+
+```sh
+python scripts/verify_runtime_assets.py
+```
 
 For Supabase, use the Transaction Pooler endpoint on port `6543`. The
 application requires TLS and disables psycopg server-side prepared statements
@@ -55,3 +93,14 @@ Set `REDIS_URL` in production. Flask-Limiter uses it for shared rate-limit
 state across Gunicorn workers. Current application limits are 5 sign-ups/hour,
 10 sign-ins/hour, and 20 chat generations/hour per client IP; adjust them for
 your traffic and provider budget.
+
+For Render, the migration command is configured as the Blueprint
+`preDeployCommand`:
+
+```sh
+flask --app wsgi db upgrade
+```
+
+It is non-destructive and uses the existing Alembic revision chain. Inspect
+`flask --app wsgi db current` against Supabase before the first deployment;
+never use `stamp`, `drop_all`, or `db init` against the remote database.

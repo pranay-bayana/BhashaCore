@@ -1,0 +1,43 @@
+services:
+  - type: web
+    name: bhashacore
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt && npm ci --prefix frontend && npm run build --prefix frontend
+    preDeployCommand: flask --app wsgi db upgrade
+    startCommand: gunicorn --config gunicorn.conf.py wsgi:app
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: PYTHON_VERSION
+        value: 3.12.11
+      - key: NODE_VERSION
+        value: 22.14.0
+      - key: WEB_CONCURRENCY
+        value: "2"
+      - key: GENERATION_PROVIDER
+        value: sarvam
+      - key: SARVAM_MODEL
+        value: sarvam-105b-conversations
+      - key: SESSION_COOKIE_SECURE
+        value: "true"
+      - key: FLASK_SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: TRUSTED_HOSTS
+        sync: false
+      - key: SARVAM_API_KEY
+        sync: false
+      - key: APP_BASE_URL
+        sync: false
+      - key: EMAIL_PROVIDER
+        sync: false
+      - key: EMAIL_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
