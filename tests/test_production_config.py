@@ -127,6 +127,64 @@ def test_production_configuration_valid_startup():
     assert res.returncode == 0, f"Startup failed with: {res.stderr}"
 
 
+def test_production_allows_guest_chat_by_default():
+    res = _run_app_import_with_env({
+        "APP_ENV": "production",
+        "FLASK_SECRET_KEY": "test-secret-key-high-entropy-production",
+        "REDIS_URL": "redis://localhost:6379/0",
+        "SESSION_COOKIE_SECURE": "true",
+        "DATABASE_URL": "postgresql://user:pass@localhost:5432/db",
+        "TRUSTED_HOSTS": "bhashacore.onrender.com,127.0.0.1",
+        "GENERATION_PROVIDER": "sarvam",
+        "SARVAM_API_KEY": "test_sarvam_key",
+        "SARVAM_MODEL": "sarvam-105b-conversations",
+    })
+    assert res.returncode == 0, f"Startup failed with: {res.stderr}"
+
+    env = dict(os.environ, **{
+        "APP_ENV": "production",
+        "FLASK_SECRET_KEY": "test-secret-key-high-entropy-production",
+        "REDIS_URL": "redis://localhost:6379/0",
+        "SESSION_COOKIE_SECURE": "true",
+        "DATABASE_URL": "postgresql://user:pass@localhost:5432/db",
+        "TRUSTED_HOSTS": "bhashacore.onrender.com,127.0.0.1",
+        "GENERATION_PROVIDER": "sarvam",
+        "SARVAM_API_KEY": "test_sarvam_key",
+        "SARVAM_MODEL": "sarvam-105b-conversations",
+    })
+    res_code = subprocess.run(
+        [sys.executable, "-c", "import wsgi; assert wsgi.app.config['ALLOW_ANONYMOUS_CHAT'] is True"],
+        cwd=str(ROOT),
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert res_code.returncode == 0, res_code.stderr
+
+
+def test_production_disables_guest_chat_when_explicitly_configured():
+    env = dict(os.environ, **{
+        "APP_ENV": "production",
+        "FLASK_SECRET_KEY": "test-secret-key-high-entropy-production",
+        "REDIS_URL": "redis://localhost:6379/0",
+        "SESSION_COOKIE_SECURE": "true",
+        "DATABASE_URL": "postgresql://user:pass@localhost:5432/db",
+        "TRUSTED_HOSTS": "bhashacore.onrender.com,127.0.0.1",
+        "GENERATION_PROVIDER": "sarvam",
+        "SARVAM_API_KEY": "test_sarvam_key",
+        "SARVAM_MODEL": "sarvam-105b-conversations",
+        "ALLOW_ANONYMOUS_CHAT": "false",
+    })
+    res_code = subprocess.run(
+        [sys.executable, "-c", "import wsgi; assert wsgi.app.config['ALLOW_ANONYMOUS_CHAT'] is False"],
+        cwd=str(ROOT),
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert res_code.returncode == 0, res_code.stderr
+
+
 def test_render_blueprint_matches_repo_spec():
     import yaml
 

@@ -250,7 +250,7 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_SECURE"] = os.environ.get("SESSION_COOKIE_SECURE", "false").lower() == "true"
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
 app.config["TRUSTED_HOSTS"] = _trusted_hosts or None
-app.config["ALLOW_ANONYMOUS_CHAT"] = not _production and os.environ.get("ALLOW_ANONYMOUS_CHAT", "true").lower() == "true"
+app.config["ALLOW_ANONYMOUS_CHAT"] = os.environ.get("ALLOW_ANONYMOUS_CHAT", "true").lower() == "true"
 if _production:
     # Render terminates TLS upstream. Trust exactly one proxy hop so Flask
     # recognizes HTTPS for secure cookies and security headers.
@@ -262,7 +262,7 @@ limiter = Limiter(key_func=get_remote_address, app=app, storage_uri=app.config["
 
 
 def chat_access_required(view):
-    """Production chat always belongs to an authenticated account."""
+    """Require an authenticated account when anonymous/guest chat is disabled."""
     @wraps(view)
     def wrapped(*args, **kwargs):
         if not app.config["ALLOW_ANONYMOUS_CHAT"] and current_user() is None:
