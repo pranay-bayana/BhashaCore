@@ -8,6 +8,7 @@ import { ChatPage } from '@/pages/ChatPage';
 import { ResearchPage } from '@/pages/ResearchPage';
 import { AboutPage } from '@/pages/AboutPage';
 import { AuthModal } from '@/pages/AuthModal';
+import { BhashaCoreGuide } from '@/components/guide/BhashaCoreGuide';
 import { fetchUserSession, authLogout } from '@/services/api';
 
 function getRouteFromPath(pathname: string): string {
@@ -121,6 +122,12 @@ export const App: React.FC = () => {
         isOpen={authModalOpen}
         onClose={() => setAuthModalOpen(false)}
         onSuccess={(u) => setUser(u)}
+      />
+
+      {/* 6. Dedicated BhashaCore Application Guide Assistant */}
+      <BhashaCoreGuide
+        onNavigate={handleNavigate}
+        onOpenAuthModal={() => setAuthModalOpen(true)}
       />
     </div>
   );

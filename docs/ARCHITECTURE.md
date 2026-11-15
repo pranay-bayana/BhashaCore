@@ -162,6 +162,7 @@ Built with React 18, TypeScript 5.6, Vite 5.4, and Tailwind CSS, the client prov
 - **`ChatComposer.tsx`**: Manages textarea auto-resize, submission throttling, keyboard bindings (Enter to submit, Shift+Enter for newlines), and language selection buttons (`Auto-detect`, `EN`, `HI`, `TE`, `TA`, `KN`, `ML`).
 - **`ChatSidebar.tsx`**: Displays active conversation lists, "New Chat" creation with race-condition prevention, and live guest trial countdowns.
 - **`LanguageContext.tsx`**: Comprehensive UI internationalization engine providing instantaneous localization of all labels, error messages, and descriptions across English and the 5 Indic languages from JSON catalogs (`frontend/src/localization/catalogs/*.json`).
+- **`BhashaCoreGuide.tsx` & `guideData.ts`**: Dedicated floating AI onboarding assistant providing instant, zero-cost, localized guidance on 12 core application capabilities without consuming guest trial slots.
 - **`ResearchDashboardView.tsx`, `LanguageComparisonView.tsx`, `FailureAnalysisView.tsx`**: Interactive scientific exploration tools visualizing benchmark results, cross-language degradation waterfalls, and failure categorizations directly from API endpoints.
 
 ### 3.2 Flask Backend API (`src/app.py`)

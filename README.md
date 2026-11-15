@@ -14,7 +14,7 @@
 [![PostgreSQL](https://img.shields.io/badge/Supabase-PostgreSQL%2015-3ECF8E?style=flat-square&logo=supabase&logoColor=white)](https://supabase.com/)
 [![Redis](https://img.shields.io/badge/Upstash-Redis-FF4438?style=flat-square&logo=redis&logoColor=white)](https://upstash.com/)
 [![Sarvam AI](https://img.shields.io/badge/LLM-Sarvam%20105B-8B5CF6?style=flat-square)](https://www.sarvam.ai/)
-[![Tests Passing](https://img.shields.io/badge/Tests-168%20Passed-brightgreen?style=flat-square&logo=pytest&logoColor=white)](tests/)
+[![Tests Passing](https://img.shields.io/badge/Tests-173%20Passed-brightgreen?style=flat-square&logo=pytest&logoColor=white)](tests/)
 
 **An enterprise-grade, research-backed multilingual conversational platform investigating and eliminating linguistic disparities across English and five major Indian languages (Hindi, Tamil, Telugu, Kannada, and Malayalam) using Large Language Models, Retrieval-Augmented Generation (RAG), and script-aware retrieval.**
 
@@ -122,6 +122,49 @@ flowchart TD
 - **Authenticated Accounts & Conversations:** Secure sign-up, sign-in, session cookies, and persistent conversation history backed by Supabase.
 - **Research Evaluation Hub:** Live interactive views for the scientific Research Dashboard, Language Comparison Matrix, and Failure Taxonomy.
 - **Resilient Error Classification:** Network and provider dropouts map to actionable, user-friendly error notifications without silent fallback fabrication.
+- **Dedicated Application Guide Assistant ("BhashaCore Guide"):** A persistent floating onboarding assistant accessible on all pages, guiding users on app features in 6 languages without consuming main chat quotas or incurring paid API fees.
+
+---
+
+### 4.1 Dedicated Application Guide Assistant ("BhashaCore Guide")
+
+In addition to the primary multilingual RAG chatbot, BhashaCore includes **BhashaCore Guide**, a dedicated floating AI onboarding assistant designed specifically to teach first-time and returning users how to navigate the platform.
+
+```mermaid
+graph LR
+    User["User on Any Page<br/>(Home, Chat, Research, About)"] --> Launcher["Floating Guide Launcher<br/>(Bottom-Right Corner)"]
+    Launcher --> GuideUI["BhashaCore Guide Panel<br/>(Glassmorphic Dark UI)"]
+    
+    GuideUI --> KB["Deterministic Guide Knowledge Base<br/>(12 Topics x 6 Languages)"]
+    KB --> Action["Interactive Deep Actions<br/>('Go to Chat', 'Open Research', 'Sign In')"]
+    
+    subgraph StrictBoundaries ["Security & Resource Isolation"]
+        NoQuota["Zero Guest Quota Consumption"]
+        NoCost["Zero External API Costs"]
+        NoDB["Zero DB Table Bloat"]
+    end
+    
+    GuideUI -.-> StrictBoundaries
+```
+
+#### Key Capabilities & Architecture of the Guide:
+1. **Clear Architectural Separation:** The Guide is completely independent of the main RAG chat pipeline (`/api/chat`). It operates via a lightweight, deterministic client-side intent matching engine (`frontend/src/components/guide/guideData.ts`).
+2. **Zero API Cost & Zero Quota Consumption:** Conversations with the Guide do **not** call paid external APIs and do **not** decrement the user's 3-message guest trial limit.
+3. **Twelve Core Help Modules across Six Languages:**
+   - How to start a new chat (shortcuts, session clearing).
+   - Asking in six languages (native scripts vs. Romanized "Hinglish").
+   - Understanding automatic script-purity detection.
+   - Using manual language selection pills.
+   - Giving explicit prompt instructions (*"Explain this in Telugu"*).
+   - Setting persistent preferences (*"From now on, answer in Hindi"*).
+   - Understanding RAG and BM25 passage retrieval.
+   - Inspecting source citations, snippets, and support scores.
+   - Guest trial limits, 7-day TTL, and PostgreSQL row locking.
+   - Signing in for unlimited cloud-synced conversation history.
+   - Navigating the scientific Research Hub (Dashboard, Comparison, Failures).
+   - Understanding BhashaCore's capabilities and acknowledged limitations.
+4. **Interactive Action Deep-Linking:** Responses from the Guide include one-click action buttons that trigger application navigation (e.g., navigating directly to the Chat Workspace, opening the Research Hub, or opening the Authentication modal).
+5. **Mobile & Desktop Responsive:** Appears as an unobtrusive floating bubble (`bottom-5 right-5`) that expands into a glassmorphic flyout panel ($400\text{px}$ wide on desktop, bounded responsive modal on mobile) with instant minimize/close controls.
 
 ---
 
@@ -443,9 +486,9 @@ cd frontend && npm run lint && npm run build
 ```
 
 ### Verified Test Results:
-- **Backend Test Suite:** **168 passed, 4 deselected in 22.45s** (`pytest`).
+- **Backend Test Suite:** **173 passed, 4 deselected in 23.62s** (`pytest`).
 - **Frontend Typecheck:** **0 errors** (`tsc --noEmit`).
-- **Production Build:** Succeeded in **1.05s** (`vite build`).
+- **Production Build:** Succeeded in **1.01s** (`vite build`).
 
 ---
 
