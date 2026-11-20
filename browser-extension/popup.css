@@ -1,0 +1,7 @@
+:root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background:#09110f; color:#eefcf5; }
+body { margin:0; width:320px; } main { padding:18px; background:radial-gradient(circle at top right,#145f46 0,transparent 46%),#0a1210; }
+header { display:flex; gap:10px; align-items:center; } .mark { display:grid; place-items:center; width:34px; height:34px; border-radius:11px; color:#062016; font-weight:900; background:linear-gradient(135deg,#b7ff65,#2ee6a6); }
+strong, small { display:block; } strong { font-size:15px; } small,.domain { color:#9ab3a8; font-size:12px; } .domain { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin:16px 0; }
+label { display:block; color:#c7d9d0; font-size:12px; margin:0 0 6px; } select,button { box-sizing:border-box; width:100%; border-radius:10px; padding:10px 12px; font:inherit; }
+select { border:1px solid #315144; background:#101d18; color:#eefcf5; margin-bottom:10px; } button { border:1px solid transparent; font-weight:700; cursor:pointer; margin-top:8px; }
+.primary { color:#042016; background:linear-gradient(135deg,#b7ff65,#2ee6a6); }.secondary { color:#d8f7e8; background:#12261e; border-color:#315c4b; }.settings { margin-top:15px; display:grid; gap:7px; }.settings label { margin:0; }.settings input { accent-color:#4cf0a8; } #status { min-height:18px; color:#8cf5c1; font-size:12px; margin:15px 0 0; } button:disabled { opacity:.55; cursor:wait; }

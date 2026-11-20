@@ -123,6 +123,11 @@ flowchart TD
 - **Research Evaluation Hub:** Live interactive views for the scientific Research Dashboard, Language Comparison Matrix, and Failure Taxonomy.
 - **Resilient Error Classification:** Network and provider dropouts map to actionable, user-friendly error notifications without silent fallback fabrication.
 - **Dedicated Application Guide Assistant ("BhashaCore Guide"):** A persistent floating onboarding assistant accessible on all pages, guiding users on app features in 6 languages without consuming main chat quotas or incurring paid API fees.
+- **BhashaCore Web Translator:** An optional Chrome Manifest V3 extension in [`browser-extension/`](browser-extension/) that translates visible website text into all six supported languages while preserving originals for restoration. It sends bounded batches to a separate, rate-limited backend endpoint and never exposes AI credentials or consumes chat trials.
+
+### Browser extension
+
+The Web Translator is a local-loadable Chrome extension; it is not published to the Chrome Web Store. After deploying the backend endpoint, open `chrome://extensions`, enable Developer mode, click **Load unpacked**, select [`browser-extension/`](browser-extension/), pin the extension, select a target language, and choose **Translate Page**. See the [extension installation, privacy, and limitations guide](browser-extension/README.md) for the exact permissions and local-development instructions.
 
 ---
 

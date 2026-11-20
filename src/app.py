@@ -261,7 +261,7 @@ def add_security_headers(response):
     if cookie_to_set and cookie_to_set in get_available_languages():
         response.set_cookie("bhashacore-ui-lang", cookie_to_set, max_age=365 * 24 * 3600, path="/", samesite="Lax")
         response.set_cookie("bhashacore-lang", cookie_to_set, max_age=365 * 24 * 3600, path="/", samesite="Lax")
-    return response
+    return _translation_cors_response(response)
 
 # ---------------------------------------------------------------------------
 # LLM availability (checked once, honestly reported to the UI)
@@ -305,7 +305,7 @@ class ProviderGenerationError(RuntimeError):
         self.latency_ms = latency_ms
 
 
-def _live_provider_answer(messages: list[dict[str, str]]) -> str:
+def _live_provider_answer(messages: list[dict[str, str]], *, max_tokens: int = MAX_OUT_TOKENS) -> str:
     """Run one verified provider request while preserving existing route contracts."""
     from src.generation_provider import GenerationRequest, create_generation_provider
 
@@ -314,7 +314,7 @@ def _live_provider_answer(messages: list[dict[str, str]]) -> str:
         result = _run_async(provider.generate(GenerationRequest(
             messages=messages,
             model=_active_generator_model(),
-            max_tokens=MAX_OUT_TOKENS,
+            max_tokens=max_tokens,
             temperature=0,
         )), timeout=LLM_CALL_TIMEOUT)
     finally:
@@ -337,6 +337,127 @@ def _live_provider_answer(messages: list[dict[str, str]]) -> str:
             latency_ms=result.latency_ms,
         )
     return result.content
+
+
+# Website translation deliberately has a separate, small API surface from
+# conversational RAG.  It has no database persistence and never touches a
+# GuestSession, so translating a page cannot spend a chat trial response.
+TRANSLATION_MAX_SEGMENTS = 40
+TRANSLATION_MAX_SEGMENT_CHARS = 800
+TRANSLATION_MAX_TOTAL_CHARS = 12_000
+_EXTENSION_ORIGIN_RE = re.compile(r"^chrome-extension://[a-p]{32}$")
+
+
+def _is_extension_request() -> bool:
+    """Recognize an MV3 request without accepting arbitrary website origins.
+
+    A Chrome extension cannot depend on a third-party session cookie: browsers
+    increasingly block those cookies, and unpacked extensions have a generated
+    ID.  This capability is therefore public-but-rate-limited and accepts only
+    Chrome-extension origins plus an explicit, non-secret protocol header.
+    It is intentionally CSRF-exempt because it does not read or mutate a user
+    session; normal browser-origin requests remain CSRF protected.
+    """
+    return bool(
+        _EXTENSION_ORIGIN_RE.fullmatch(request.headers.get("Origin", ""))
+        and request.headers.get("X-BhashaCore-Extension") == "1"
+    )
+
+
+def _translation_cors_response(response):
+    if request.path != "/api/translate" or not _is_extension_request():
+        return response
+    origin = request.headers["Origin"]
+    response.headers["Access-Control-Allow-Origin"] = origin
+    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, X-BhashaCore-Extension"
+    response.headers["Access-Control-Max-Age"] = "600"
+    response.headers["Vary"] = "Origin"
+    return response
+
+
+def _parse_translation_payload(data: object) -> tuple[str, list[dict[str, str]]]:
+    if not isinstance(data, dict):
+        raise ValueError("JSON object body required")
+    target_lang = data.get("target_lang")
+    segments = data.get("segments")
+    if target_lang not in LANGS:
+        raise ValueError("unsupported target language")
+    if not isinstance(segments, list) or not segments:
+        raise ValueError("segments must be a non-empty array")
+    if len(segments) > TRANSLATION_MAX_SEGMENTS:
+        raise ValueError(f"too many segments (max {TRANSLATION_MAX_SEGMENTS})")
+    clean: list[dict[str, str]] = []
+    total = 0
+    ids: set[str] = set()
+    for segment in segments:
+        if not isinstance(segment, dict):
+            raise ValueError("each segment must be an object")
+        identifier, text = segment.get("id"), segment.get("text")
+        if not isinstance(identifier, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", identifier):
+            raise ValueError("each segment id must be 1-80 URL-safe characters")
+        if identifier in ids:
+            raise ValueError("segment ids must be unique")
+        if not isinstance(text, str) or not text.strip():
+            raise ValueError("each segment text must be non-empty")
+        if len(text) > TRANSLATION_MAX_SEGMENT_CHARS:
+            raise ValueError(f"segment text too long (max {TRANSLATION_MAX_SEGMENT_CHARS} chars)")
+        ids.add(identifier)
+        total += len(text)
+        clean.append({"id": identifier, "text": text})
+    if total > TRANSLATION_MAX_TOTAL_CHARS:
+        raise ValueError(f"translation payload too long (max {TRANSLATION_MAX_TOTAL_CHARS} chars)")
+    return target_lang, clean
+
+
+def _parse_translation_result(content: str, expected_ids: set[str]) -> list[dict[str, str]]:
+    """Accept only a complete, ID-preserving JSON result from the provider."""
+    candidate = content.strip()
+    if candidate.startswith("```"):
+        candidate = re.sub(r"^```(?:json)?\\s*|\\s*```$", "", candidate, flags=re.IGNORECASE).strip()
+    try:
+        decoded = json.loads(candidate)
+    except json.JSONDecodeError as exc:
+        raise ValueError("provider returned invalid translation JSON") from exc
+    translations = decoded.get("translations") if isinstance(decoded, dict) else None
+    if not isinstance(translations, list) or len(translations) != len(expected_ids):
+        raise ValueError("provider returned an incomplete translation batch")
+    result: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for item in translations:
+        if not isinstance(item, dict):
+            raise ValueError("provider returned malformed translation item")
+        identifier, text = item.get("id"), item.get("text")
+        if identifier not in expected_ids or identifier in seen or not isinstance(text, str) or not text.strip():
+            raise ValueError("provider returned invalid translation mapping")
+        if len(text) > TRANSLATION_MAX_SEGMENT_CHARS * 3:
+            raise ValueError("provider returned an unexpectedly large translation")
+        seen.add(identifier)
+        result.append({"id": identifier, "text": text.strip()})
+    if seen != expected_ids:
+        raise ValueError("provider translation IDs did not match request")
+    return result
+
+
+def _translate_segments(target_lang: str, segments: list[dict[str, str]]) -> list[dict[str, str]]:
+    language_name = LANGS[target_lang]["name"]
+    payload = json.dumps(segments, ensure_ascii=False, separators=(",", ":"))
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are a precise website translator. Translate each input text into "
+                f"{language_name}. Preserve meaning, names, numbers, URLs, and formatting. "
+                "Return ONLY valid JSON with exactly this schema: "
+                '{"translations":[{"id":"input id","text":"translated text"}]}. '
+                "Return every input id exactly once; never add commentary."
+            ),
+        },
+        {"role": "user", "content": payload},
+    ]
+    # Keep translation prompts bounded independently of long-form RAG answers.
+    content = _live_provider_answer(messages, max_tokens=min(2048, MAX_OUT_TOKENS))
+    return _parse_translation_result(content, {segment["id"] for segment in segments})
 
 
 def _public_provider_error(exc: Exception) -> tuple[dict, int]:
@@ -992,6 +1113,49 @@ def grounded_examples(max_per_lang: int = 3) -> dict:
 # ---------------------------------------------------------------------------
 # API endpoints
 # ---------------------------------------------------------------------------
+
+
+@app.route("/api/translate", methods=["OPTIONS"])
+def translation_preflight():
+    """CORS preflight for the MV3 extension only."""
+    if not _is_extension_request():
+        return jsonify({"error": "extension_origin_required"}), 403
+    return ("", 204)
+
+
+@app.post("/api/translate")
+@csrf.exempt
+@limiter.limit("120 per hour")
+def api_translate():
+    """Translate a bounded extension batch without RAG, history, or chat quota.
+
+    This route intentionally cannot be used by an arbitrary page origin, and
+    it does not rely on cross-site cookies.  The actual provider credential
+    remains exclusively in the server environment.
+    """
+    if not _is_extension_request():
+        return jsonify({"error": "extension_origin_required", "message": "Use BhashaCore Web Translator."}), 403
+    try:
+        target_lang, segments = _parse_translation_payload(request.get_json(silent=True))
+    except ValueError as exc:
+        return jsonify({"error": "invalid_translation_request", "message": str(exc)}), 400
+    try:
+        translations = _translate_segments(target_lang, segments)
+    except ProviderGenerationError as exc:
+        payload, status = _public_provider_error(exc)
+        current_app.logger.warning(
+            "translation provider failed code=%s provider_status=%s latency_ms=%s segments=%s",
+            exc.code, exc.status_code, exc.latency_ms, len(segments),
+        )
+        return jsonify(payload), status
+    except ValueError as exc:
+        # A syntactically successful provider response is still untrusted.
+        current_app.logger.warning("translation provider response rejected reason=%s segments=%s", str(exc), len(segments))
+        return jsonify({"error": "translation_response_invalid", "message": "The translation response could not be verified. Retry once."}), 502
+    except Exception:
+        current_app.logger.exception("translation generation failed segments=%s", len(segments))
+        return jsonify({"error": "translation_unavailable", "message": "Translation is temporarily unavailable. Retry once."}), 503
+    return jsonify({"target_lang": target_lang, "translations": translations})
 
 
 @app.post("/api/chat")

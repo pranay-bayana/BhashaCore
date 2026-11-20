@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="popup.css"><title>BhashaCore Web Translator</title></head>
+  <body>
+    <main>
+      <header><span class="mark">B</span><div><strong>BhashaCore</strong><small>Web Translator</small></div></header>
+      <p id="domain" class="domain">Current website</p>
+      <label for="language">Translate into</label>
+      <select id="language"><option value="en">English — English</option><option value="hi">Hindi — हिन्दी</option><option value="te">Telugu — తెలుగు</option><option value="ta">Tamil — தமிழ்</option><option value="kn">Kannada — ಕನ್ನಡ</option><option value="ml">Malayalam — മലയാളം</option></select>
+      <button id="translate" class="primary">Translate Page</button>
+      <button id="restore" class="secondary">Restore Original</button>
+      <div class="settings"><label><input id="auto" type="checkbox"> Auto-translate new pages</label><label><input id="floating" type="checkbox"> Floating control</label></div>
+      <p id="status" role="status" aria-live="polite">Original</p>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

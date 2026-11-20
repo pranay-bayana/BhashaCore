@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "BhashaCore Web Translator",
+  "description": "Translate visible website text into six Indian languages without exposing provider credentials.",
+  "version": "1.0.0",
+  "action": {
+    "default_title": "BhashaCore Web Translator",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "permissions": ["activeTab", "scripting", "storage"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
+  "host_permissions": [
+    "https://bhashacore.onrender.com/*",
+    "http://127.0.0.1:8001/*",
+    "http://localhost:8001/*"
+  ]
+}
